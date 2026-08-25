@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="package" version="4.0" method="upgrade">
+    <name>Sources Package</name>
+    <packagename>sources</packagename>
+    <creationDate>2026-05-02</creationDate>
+    <author>SuperSoft</author>
+    <authorEmail></authorEmail>
+    <authorUrl></authorUrl>
+    <copyright>(C) SuperSoft</copyright>
+    <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
+    <version>1.2.13</version>
+    <description>PKG_SOURCES_XML_DESCRIPTION</description>
+
+    <languages folder="language">
+        <language tag="en-GB" client="administrator">en-GB/pkg_sources.ini</language>
+        <language tag="en-GB" client="administrator">en-GB/pkg_sources.sys.ini</language>
+        <language tag="el-GR" client="administrator">el-GR/pkg_sources.ini</language>
+        <language tag="el-GR" client="administrator">el-GR/pkg_sources.sys.ini</language>
+    </languages>
+
+    <files folder="packages">
+        <file type="plugin" id="sources" group="content">plg_content_sources.zip</file>
+        <file type="plugin" id="sourcesbutton" group="editors-xtd">plg_editors_xtd_sourcesbutton.zip</file>
+    </files>
+</extension>

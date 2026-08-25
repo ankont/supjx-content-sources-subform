@@ -2,12 +2,12 @@
 <extension type="plugin" group="content" method="upgrade">
     <name>PLG_CONTENT_SOURCES</name>
     <author>SuperSoft</author>
-    <creationDate>2026-02-24</creationDate>
+    <creationDate>2026-05-02</creationDate>
     <copyright>(C) SuperSoft</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
     <authorEmail></authorEmail>
     <authorUrl></authorUrl>
-    <version>1.0.0</version>
+    <version>1.2.13</version>
     <description>PLG_CONTENT_SOURCES_XML_DESCRIPTION</description>
 
     <namespace path="src">SuperSoft\Plugin\Content\Sources</namespace>
@@ -55,6 +55,37 @@
                     <option value="0">JNO</option>
                 </field>
                 <field
+                    name="list_token_mode"
+                    type="list"
+                    default="hide"
+                    label="PLG_CONTENT_SOURCES_LIST_TOKEN_MODE_LABEL"
+                    description="PLG_CONTENT_SOURCES_LIST_TOKEN_MODE_DESC"
+                >
+                    <option value="hide">PLG_CONTENT_SOURCES_LIST_TOKEN_MODE_HIDE</option>
+                    <option value="placeholder">PLG_CONTENT_SOURCES_LIST_TOKEN_MODE_PLACEHOLDER</option>
+                </field>
+                <field
+                    name="heading_tag"
+                    type="list"
+                    default="h2"
+                    label="PLG_CONTENT_SOURCES_HEADING_TAG_LABEL"
+                    description="PLG_CONTENT_SOURCES_HEADING_TAG_DESC"
+                >
+                    <option value="h2">H2</option>
+                    <option value="h3">H3</option>
+                    <option value="h4">H4</option>
+                    <option value="h5">H5</option>
+                    <option value="div">DIV</option>
+                    <option value="none">PLG_CONTENT_SOURCES_HEADING_TAG_NONE</option>
+                </field>
+                <field
+                    name="heading_class"
+                    type="text"
+                    default=""
+                    label="PLG_CONTENT_SOURCES_HEADING_CLASS_LABEL"
+                    description="PLG_CONTENT_SOURCES_HEADING_CLASS_DESC"
+                />
+                <field
                     name="templates_base_path"
                     type="text"
                     default=""
@@ -69,28 +100,6 @@
                     hint="PLG_CONTENT_SOURCES_TEMPLATES_ENTRY_FILE_HINT"
                     label="PLG_CONTENT_SOURCES_TEMPLATES_ENTRY_FILE_LABEL"
                     description="PLG_CONTENT_SOURCES_TEMPLATES_ENTRY_FILE_DESC"
-                />
-                <field
-                    name="admin_preview_mode"
-                    type="list"
-                    default="list_manual"
-                    label="PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_LABEL"
-                    description="PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_DESC"
-                >
-                    <option value="none">PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_NONE</option>
-                    <option value="placeholder">PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_PLACEHOLDER</option>
-                    <option value="list_manual">PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_LIST_MANUAL</option>
-                    <option value="list_full">PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_LIST_FULL</option>
-                    <option value="render">PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MODE_RENDER</option>
-                </field>
-                <field
-                    name="admin_preview_max_items"
-                    type="number"
-                    default="20"
-                    min="1"
-                    label="PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MAX_ITEMS_LABEL"
-                    description="PLG_CONTENT_SOURCES_ADMIN_PREVIEW_MAX_ITEMS_DESC"
-                    filter="integer"
                 />
             </fieldset>
         </fields>

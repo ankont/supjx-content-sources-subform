@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sources CSS Icon Options</title>
+  <style>
+    :root { color-scheme: light; --blue:#1f5fd1; --green:#14834f; --ink:#142033; --muted:#526179; --line:#d6dee8; --bg:#f4f7fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { margin: 0 0 24px; color: var(--muted); }
+    .options { display: grid; gap: 22px; max-width: 980px; }
+    .set { padding: 18px; border: 1px solid #e0e7ef; border-radius: 10px; background: #fff; }
+    .set h2 { margin: 0 0 14px; font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .card { min-height: 148px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); background: #f7fbff; }
+    .label { margin-top: 14px; font-weight: 750; }
+    .desc { margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.35; }
+    .icon { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 999px; background: #eef4ff; color: var(--blue); position: relative; }
+    .rest .icon { background:#eaf8f0; color:var(--green); }
+
+    /* Set A: stacked cards / grid / list */
+    .a-all:before,.a-all:after { content:""; position:absolute; left:14px; width:18px; height:11px; border:3px solid currentColor; border-radius:3px; background:#eef4ff; }
+    .a-all:before { top:12px; box-shadow: 4px 4px 0 -1px #eef4ff, 4px 4px 0 2px currentColor; }
+    .a-all:after { display:none; }
+    .a-one:before { content:""; width:20px; height:20px; border:3px solid currentColor; border-radius:4px; }
+    .a-rest:before { content:""; width:22px; height:3px; border-radius:2px; background:currentColor; box-shadow:0 -8px 0 currentColor,0 8px 0 currentColor; }
+    .a-rest:after { content:""; position:absolute; left:13px; top:12px; width:4px; height:4px; border-radius:50%; background:currentColor; box-shadow:0 8px 0 currentColor,0 16px 0 currentColor; }
+
+    /* Set B: bracket tokens */
+    .b-all:before { content:"{}"; font-size:21px; font-weight:850; letter-spacing:-2px; }
+    .b-all:after { content:""; position:absolute; right:10px; bottom:10px; width:12px; height:12px; border:2px solid currentColor; border-radius:3px; background:#eef4ff; }
+    .b-one:before { content:"{1}"; font-size:18px; font-weight:850; letter-spacing:-1px; }
+    .b-rest:before { content:"{...}"; font-size:15px; font-weight:850; letter-spacing:-1px; }
+
+    /* Set C: compact source marks */
+    .c-all:before { content:""; width:22px; height:18px; border:3px solid currentColor; border-radius:4px; transform:rotate(-8deg); box-shadow:6px 5px 0 -2px #eef4ff,6px 5px 0 1px currentColor; }
+    .c-one:before { content:""; width:9px; height:9px; border-radius:3px; background:currentColor; box-shadow:14px 0 0 currentColor,0 14px 0 currentColor,14px 14px 0 currentColor; }
+    .c-rest:before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; box-shadow:9px 0 0 currentColor,18px 0 0 currentColor; }
+    .c-rest:after { content:""; position:absolute; left:13px; top:25px; width:20px; height:3px; border-radius:2px; background:currentColor; box-shadow:0 7px 0 currentColor; }
+
+    /* Set D: source flow */
+    .d-all:before { content:""; width:24px; height:24px; border:3px solid currentColor; border-radius:50%; }
+    .d-all:after { content:""; position:absolute; width:10px; height:10px; border:3px solid currentColor; border-radius:50%; background:#eef4ff; left:10px; top:10px; box-shadow:13px 0 0 -1px #eef4ff,13px 0 0 2px currentColor,6px 12px 0 -1px #eef4ff,6px 12px 0 2px currentColor; }
+    .d-one:before { content:""; width:18px; height:18px; border:3px solid currentColor; border-radius:50%; }
+    .d-one:after { content:""; position:absolute; width:5px; height:5px; border-radius:50%; background:currentColor; }
+    .d-rest:before { content:""; width:22px; height:3px; border-radius:2px; background:currentColor; box-shadow:0 8px 0 currentColor; transform:translateY(-4px); }
+    .d-rest:after { content:""; position:absolute; right:12px; top:16px; width:8px; height:8px; border-top:3px solid currentColor; border-right:3px solid currentColor; transform:rotate(45deg); }
+  </style>
+</head>
+<body>
+  <h1>Sources CSS Icon Options</h1>
+  <p>Preview ??? ?? ???? cards ??? insert modal. ??? ????? ?????? CSS, ????? SVG ? icon fonts.</p>
+  <main class="options">
+    <section class="set"><h2>A. Objects: stack / single / list</h2><div class="cards">
+      <div class="card"><span class="icon a-all"></span><div class="label">All sources</div><div class="desc">Insert all available sources.</div></div>
+      <div class="card selected"><span class="icon a-one"></span><div class="label">Specific source block</div><div class="desc">Insert sources from a specific block number.</div></div>
+      <div class="card rest"><span class="icon a-rest"></span><div class="label">Remaining sources</div><div class="desc">Insert sources after the selected block.</div></div>
+    </div></section>
+
+    <section class="set"><h2>B. Token-style: {}, {1}, {...}</h2><div class="cards">
+      <div class="card"><span class="icon b-all"></span><div class="label">All sources</div><div class="desc">Insert all available sources.</div></div>
+      <div class="card selected"><span class="icon b-one"></span><div class="label">Specific source block</div><div class="desc">Insert sources from a specific block number.</div></div>
+      <div class="card rest"><span class="icon b-rest"></span><div class="label">Remaining sources</div><div class="desc">Insert sources after the selected block.</div></div>
+    </div></section>
+
+    <section class="set"><h2>C. Compact UI: pages / grid / bullets</h2><div class="cards">
+      <div class="card"><span class="icon c-all"></span><div class="label">All sources</div><div class="desc">Insert all available sources.</div></div>
+      <div class="card selected"><span class="icon c-one"></span><div class="label">Specific source block</div><div class="desc">Insert sources from a specific block number.</div></div>
+      <div class="card rest"><span class="icon c-rest"></span><div class="label">Remaining sources</div><div class="desc">Insert sources after the selected block.</div></div>
+    </div></section>
+
+    <section class="set"><h2>D. Source flow: group / one / continue</h2><div class="cards">
+      <div class="card"><span class="icon d-all"></span><div class="label">All sources</div><div class="desc">Insert all available sources.</div></div>
+      <div class="card selected"><span class="icon d-one"></span><div class="label">Specific source block</div><div class="desc">Insert sources from a specific block number.</div></div>
+      <div class="card rest"><span class="icon d-rest"></span><div class="label">Remaining sources</div><div class="desc">Insert sources after the selected block.</div></div>
+    </div></section>
+  </main>
+</body>
+</html>

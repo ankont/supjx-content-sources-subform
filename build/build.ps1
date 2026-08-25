@@ -2,8 +2,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$pluginRoot = Join-Path $repoRoot 'plugin'
-$manifestPath = Join-Path $pluginRoot 'sources.xml'
+$packageRoot = Join-Path $repoRoot 'package'
+$packageManifestPath = Join-Path $packageRoot 'pkg_sources.xml'
+$contentPluginRoot = Join-Path $packageRoot 'plugins\content\sources'
+$editorPluginRoot = Join-Path $packageRoot 'plugins\editors-xtd\sourcesbutton'
 $buildRoot = Join-Path $repoRoot 'build'
 $stageRoot = Join-Path $buildRoot 'stage'
 $outputRoot = Join-Path $buildRoot 'output'
@@ -89,20 +91,54 @@ function Get-ManifestVersion {
     return $version
 }
 
-if (-not (Test-Path $pluginRoot)) {
-    throw "Plugin source folder not found: $pluginRoot"
+$requiredPaths = @(
+    $packageRoot,
+    $contentPluginRoot,
+    $editorPluginRoot
+)
+
+foreach ($requiredPath in $requiredPaths) {
+    if (-not (Test-Path $requiredPath)) {
+        throw "Required source path not found: $requiredPath"
+    }
 }
 
-$version = Get-ManifestVersion -ManifestPath $manifestPath
+$packageVersion = Get-ManifestVersion -ManifestPath $packageManifestPath
+$contentPluginManifestPath = Join-Path $contentPluginRoot 'sources.xml'
+$editorPluginManifestPath = Join-Path $editorPluginRoot 'sourcesbutton.xml'
 
+foreach ($manifestPath in @($contentPluginManifestPath, $editorPluginManifestPath)) {
+    if (-not (Test-Path $manifestPath)) {
+        throw "Plugin manifest not found: $manifestPath"
+    }
+}
+
+Ensure-CleanDirectory -Path $outputRoot
 Ensure-CleanDirectory -Path $stageRoot
-New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
-$pluginStage = Join-Path $stageRoot 'plugin'
-New-Item -ItemType Directory -Path $pluginStage | Out-Null
-Copy-Item -Path (Join-Path $pluginRoot '*') -Destination $pluginStage -Recurse -Force
+$pluginsStageRoot = Join-Path $stageRoot 'plugins'
+New-Item -ItemType Directory -Path $pluginsStageRoot | Out-Null
 
-$zipPath = Join-Path $outputRoot ("plg_content_sources-v{0}.zip" -f $version)
-New-ZipFromDirectoryContents -SourceDirectory $pluginStage -DestinationZip $zipPath
+$contentZip = Join-Path $pluginsStageRoot 'plg_content_sources.zip'
+$editorZip = Join-Path $pluginsStageRoot 'plg_editors_xtd_sourcesbutton.zip'
+New-ZipFromDirectoryContents -SourceDirectory $contentPluginRoot -DestinationZip $contentZip
+New-ZipFromDirectoryContents -SourceDirectory $editorPluginRoot -DestinationZip $editorZip
 
-Write-Host ('Created: {0}' -f $zipPath)
+$packageStage = Join-Path $stageRoot 'package'
+New-Item -ItemType Directory -Path $packageStage | Out-Null
+$packageFilesStage = Join-Path $packageStage 'packages'
+New-Item -ItemType Directory -Path $packageFilesStage | Out-Null
+
+Copy-Item -Path $packageManifestPath -Destination $packageStage -Force
+Copy-Item -Path $contentZip -Destination $packageFilesStage -Force
+Copy-Item -Path $editorZip -Destination $packageFilesStage -Force
+
+$packageLanguageSource = Join-Path $packageRoot 'language'
+if (Test-Path $packageLanguageSource) {
+    Copy-Item -Path $packageLanguageSource -Destination $packageStage -Recurse -Force
+}
+
+$packageZip = Join-Path $outputRoot ("pkg_sources_v{0}.zip" -f $packageVersion)
+New-ZipFromDirectoryContents -SourceDirectory $packageStage -DestinationZip $packageZip
+
+Write-Host ('Created: {0}' -f $packageZip)

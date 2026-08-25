@@ -9,6 +9,7 @@ namespace SuperSoft\Plugin\Content\Sources\Extension;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Plugin\CMSPlugin;
+use Joomla\Component\Fields\Administrator\Helper\FieldsHelper;
 
 final class Sources extends CMSPlugin
 {
@@ -16,7 +17,7 @@ final class Sources extends CMSPlugin
 
     public function onContentPrepare($context, &$article, &$params, $page = 0): void
     {
-        if (!is_string($context) || strpos($context, 'com_content.article') === false) {
+        if (!is_string($context) || !$this->isSupportedContentContext($context)) {
             return;
         }
 
@@ -28,6 +29,17 @@ final class Sources extends CMSPlugin
         $tokenName        = trim((string) $this->params->get('token_name', 'sources'));
 
         if ($subformFieldName === '' || $tokenName === '') {
+            return;
+        }
+
+        $text    = $article->text;
+        $pattern = $this->buildTokenPattern($tokenName);
+
+        if (!$this->isFullArticleContext($context)) {
+            if (preg_match($pattern, $text)) {
+                $article->text = $this->replaceListViewTokens($text, $pattern);
+            }
+
             return;
         }
 
@@ -43,9 +55,7 @@ final class Sources extends CMSPlugin
             return;
         }
 
-        $text       = $article->text;
         $totalBlocks = count($sourcesRows);
-        $pattern    = $this->buildTokenPattern($tokenName);
 
         if (!preg_match($pattern, $text)) {
             if ((bool) $this->params->get('append_if_missing', 1)) {
@@ -60,7 +70,16 @@ final class Sources extends CMSPlugin
         $article->text = (string) preg_replace_callback(
             $pattern,
             function (array $matches) use (&$renderedIndices, $article, $sourcesField, $sourcesRows, $totalBlocks): string {
-                $arg = isset($matches[1]) ? strtolower(trim((string) $matches[1])) : '';
+                $rawArg = '';
+
+                foreach (array_slice($matches, 1) as $match) {
+                    if (isset($match) && is_string($match) && $match !== '' && $match !== '"' && $match !== "'") {
+                        $rawArg = $match;
+                        break;
+                    }
+                }
+
+                $arg = strtolower(trim((string) $rawArg));
 
                 if ($arg === '') {
                     $indices = range(0, $totalBlocks - 1);
@@ -99,9 +118,113 @@ final class Sources extends CMSPlugin
         );
     }
 
+    /**
+     * Frontend AJAX endpoint for rendering sources preview.
+     * Called via: /index.php?option=com_ajax&plugin=sources&group=content&format=raw&article_id=X
+     */
+    public function onAjaxSources()
+    {
+        $app = Factory::getApplication();
+
+        if (!$app->isClient('site')) {
+            return '';
+        }
+
+        $input     = $app->getInput();
+        $articleId = $input->getInt('article_id', 0);
+
+        if ($articleId <= 0) {
+            return '';
+        }
+
+        $db    = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->select('*')
+            ->from($db->quoteName('#__content'))
+            ->where($db->quoteName('id') . ' = ' . $articleId);
+
+        $db->setQuery($query);
+        $article = $db->loadObject();
+
+        if (!$article) {
+            return '';
+        }
+
+        $article->jcfields = FieldsHelper::getFields('com_content.article', $article, true);
+
+        $fieldName    = trim((string) $this->params->get('subform_field_name', 'blocks')) ?: 'blocks';
+        $sourcesField = $this->findSubformField($article, $fieldName);
+
+        if (!$sourcesField) {
+            return '';
+        }
+
+        $rows = $this->extractRows($sourcesField);
+
+        if (!$rows) {
+            return '';
+        }
+
+        $indicesParam = $input->getString('indices', '');
+        $mode         = $input->getCmd('mode', 'all');
+        $indices      = [];
+
+        if ($indicesParam !== '') {
+            foreach (explode(',', $indicesParam) as $i) {
+                $idx = (int) trim($i);
+
+                if ($idx >= 0 && $idx < count($rows)) {
+                    $indices[] = $idx;
+                }
+            }
+        }
+
+        if (!$indices) {
+            $indices = range(0, count($rows) - 1);
+        }
+
+        $html = $this->renderFrontend($article, $sourcesField, $rows, $indices, $mode);
+
+        $app->setHeader('Content-Type', 'text/html; charset=utf-8');
+        echo $html;
+        $app->close();
+    }
+
     private function buildTokenPattern(string $tokenName): string
     {
-        return '/\{\s*' . preg_quote($tokenName, '/') . '\s*(?::\s*(rest|[1-9]\d*)\s*)?\}/i';
+        $token = preg_quote($tokenName, '/');
+        $inner = '\{\s*' . $token . '\s*(?::\s*(rest|[1-9]\d*)\s*)?\}';
+        $dataToken = '<span\b(?=[^>]*\bsources-editor-token\b)(?=[^>]*\bdata-sources-token\s*=\s*(["\'])\{\s*' . $token . '\s*(?::\s*(rest|[1-9]\d*)\s*)?\}\1)[^>]*>.*?<\/span>';
+        $wrappedToken = '<span\b(?=[^>]*\bsources-editor-token\b)[^>]*>\s*' . $inner . '\s*<\/span>';
+
+        return '/(?:' . $dataToken . '|' . $wrappedToken . '|' . $inner . ')/is';
+    }
+
+    private function isSupportedContentContext(string $context): bool
+    {
+        return strpos($context, 'com_content.article') !== false
+            || strpos($context, 'com_content.category') !== false
+            || strpos($context, 'com_content.featured') !== false;
+    }
+
+    private function isFullArticleContext(string $context): bool
+    {
+        return strpos($context, 'com_content.article') !== false;
+    }
+
+    private function replaceListViewTokens(string $text, string $pattern): string
+    {
+        $mode = (string) $this->params->get('list_token_mode', 'hide');
+
+        if ($mode === 'placeholder') {
+            $label = '[' . htmlspecialchars(Text::_('PLG_CONTENT_SOURCES_LIST_TOKEN_PLACEHOLDER'), ENT_QUOTES, 'UTF-8') . ']';
+            $style = 'display:inline-flex;align-items:center;margin:0 .12rem;padding:.16rem .45rem;border:1px solid #8fb3d9;border-radius:.3rem;background:#eef6ff;color:#1f4e79;font:600 .9em/1.3 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;white-space:nowrap;';
+            $placeholder = '<span class="sources-list-placeholder" style="' . $style . '">' . $label . '</span>';
+
+            return (string) preg_replace($pattern, $placeholder, $text);
+        }
+
+        return (string) preg_replace($pattern, '', $text);
     }
 
     private function findSubformField(object $article, string $fieldName): ?object
@@ -153,7 +276,13 @@ final class Sources extends CMSPlugin
         }
 
         if ($basePath === '') {
-            $basePath = JPATH_THEMES . '/' . Factory::getApplication()->getTemplate() . '/html/com_content/article';
+            $app = Factory::getApplication();
+            
+            if ($app->isClient('administrator')) {
+                $basePath = JPATH_SITE . '/templates/' . $this->getSiteTemplateName() . '/html/com_content/article';
+            } else {
+                $basePath = JPATH_THEMES . '/' . $app->getTemplate() . '/html/com_content/article';
+            }
         }
 
         $templatePath = rtrim($basePath, '/\\') . '/' . ltrim($entryFile, '/\\');
@@ -167,11 +296,36 @@ final class Sources extends CMSPlugin
         $sourcesRows           = $rows;
         $sources_block_indices = array_values(array_unique(array_map('intval', $indices)));
         $sources_render_mode   = $mode;
+        $sources_heading_tag   = trim((string) $this->params->get('heading_tag', 'h2'));
+        $sources_heading_class = trim((string) $this->params->get('heading_class', ''));
 
         ob_start();
         include $templatePath;
 
         return (string) ob_get_clean();
+    }
+
+    private function getSiteTemplateName(): string
+    {
+        try {
+            $db = Factory::getDbo();
+            $query = $db->getQuery(true)
+                ->select($db->quoteName('template'))
+                ->from($db->quoteName('#__template_styles'))
+                ->where($db->quoteName('client_id') . ' = 0')
+                ->where($db->quoteName('home') . ' != ' . $db->quote('0'))
+                ->order($db->quoteName('home') . ' ASC');
+
+            $db->setQuery($query, 0, 1);
+            $template = trim((string) $db->loadResult());
+
+            if ($template !== '') {
+                return $template;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return 'cassiopeia';
     }
 
     private function renderAdministrator(object $article, array $sourcesRows, array $indices, string $mode): string
@@ -218,7 +372,7 @@ final class Sources extends CMSPlugin
         $manualByBlock = [];
 
         foreach ($valid as $idx) {
-            $ids               = $this->extractIdList($sourcesRows[$idx] ?? [], 'block-manual-articles');
+            $ids               = $this->extractIdList($sourcesRows[$idx] ?? [], $this->fieldAliases('manual'));
             $manualByBlock[$idx] = $ids;
 
             foreach ($ids as $id) {
@@ -233,10 +387,10 @@ final class Sources extends CMSPlugin
 
         foreach ($valid as $idx) {
             $row      = $sourcesRows[$idx] ?? [];
-            $title    = $this->extractTextValue($row, 'block-title');
-            $tags     = $this->extractIdList($row, 'block-tags');
-            $cats     = $this->extractIdList($row, 'block-categories');
-            $limit    = $this->extractPositiveInt($row, 'block-limit', $maxItems);
+            $title    = $this->extractTextValue($row, $this->fieldAliases('title'));
+            $tags     = $this->extractIdList($row, $this->fieldAliases('tags'));
+            $cats     = $this->extractIdList($row, $this->fieldAliases('categories'));
+            $limit    = $this->extractPositiveInt($row, $this->fieldAliases('limit'), $maxItems);
             $manualIds = $manualByBlock[$idx] ?? [];
 
             $html .= '<div class="sources-preview-block">';
@@ -404,13 +558,22 @@ final class Sources extends CMSPlugin
         return $map;
     }
 
-    private function extractTextValue($row, string $key): string
+    private function fieldAliases(string $type): array
     {
-        if (!is_array($row) || !isset($row[$key]) || !is_object($row[$key]) || !property_exists($row[$key], 'rawvalue')) {
-            return '';
-        }
+        $aliases = [
+            'title'      => ['block-title', 'title', 'list-title', 'list_title', 'sources-title', 'sources_title', 'source-title', 'source_title'],
+            'manual'     => ['block-manual-articles', 'block-selected-sources', 'block-selected_sources', 'block-selected-articles', 'block-selected_articles', 'block-source-articles', 'block-source_articles', 'block-sources-articles', 'block-sources_articles', 'block-articles', 'block-sources', 'block-items', 'manual-articles', 'manual_articles', 'manualarticles', 'manual-sources', 'manual_sources', 'manualsources', 'manual', 'selected-sources', 'selected_sources', 'selectedsources', 'selected-source', 'selected_source', 'selected-articles', 'selected_articles', 'selectedarticles', 'selected-article', 'selected_article', 'selected-items', 'selected_items', 'selected', 'sources', 'source-articles', 'source_articles', 'sources-articles', 'sources_articles', 'source', 'articles', 'article', 'article-ids', 'article_ids', 'articleids', 'items', 'content-items', 'content_items'],
+            'tags'       => ['block-tags', 'tags', 'source-tags', 'source_tags', 'sources-tags', 'sources_tags'],
+            'categories' => ['block-categories', 'categories', 'tag-categories', 'tag_categories', 'source-categories', 'source_categories', 'sources-categories', 'sources_categories'],
+            'limit'      => ['block-limit', 'limit', 'sources-limit', 'sources_limit', 'source-limit', 'source_limit'],
+        ];
 
-        $value = $row[$key]->rawvalue;
+        return $aliases[$type] ?? [];
+    }
+
+    private function extractTextValue($row, $keys): string
+    {
+        $value = $this->extractRowValue($row, $keys);
 
         if (is_array($value)) {
             $value = reset($value);
@@ -419,40 +582,136 @@ final class Sources extends CMSPlugin
         return is_scalar($value) ? trim((string) $value) : '';
     }
 
-    private function extractIdList($row, string $key): array
+    private function extractIdList($row, $keys): array
     {
-        if (!is_array($row) || !isset($row[$key]) || !is_object($row[$key]) || !property_exists($row[$key], 'rawvalue')) {
-            return [];
-        }
-
-        $value = $row[$key]->rawvalue;
+        $value = $this->extractRowValue($row, $keys);
 
         if ($value === null || $value === '') {
             return [];
         }
 
-        if (!is_array($value)) {
-            $value = [$value];
-        }
-
         $ids = [];
-
-        foreach ($value as $item) {
-            if (is_scalar($item) && preg_match('/^\d+$/', (string) $item)) {
-                $id = (int) $item;
-
-                if ($id > 0) {
-                    $ids[$id] = $id;
-                }
-            }
-        }
+        $this->collectIdsFromValue($value, $ids);
 
         return array_values($ids);
     }
 
-    private function extractPositiveInt($row, string $key, int $default): int
+    private function collectIdsFromValue($value, array &$ids): void
     {
-        $value = $this->extractTextValue($row, $key);
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        if (is_object($value)) {
+            if (property_exists($value, 'rawvalue')) {
+                $this->collectIdsFromValue($value->rawvalue, $ids);
+                return;
+            }
+
+            if (property_exists($value, 'value')) {
+                $this->collectIdsFromValue($value->value, $ids);
+                return;
+            }
+
+            if (property_exists($value, 'id')) {
+                $this->collectIdsFromValue($value->id, $ids);
+                return;
+            }
+
+            $value = get_object_vars($value);
+        }
+
+        if (is_array($value)) {
+            if (array_key_exists('rawvalue', $value)) {
+                $this->collectIdsFromValue($value['rawvalue'], $ids);
+                return;
+            }
+
+            if (array_key_exists('value', $value)) {
+                $this->collectIdsFromValue($value['value'], $ids);
+                return;
+            }
+
+            if (array_key_exists('id', $value)) {
+                $this->collectIdsFromValue($value['id'], $ids);
+                return;
+            }
+
+            foreach ($value as $item) {
+                $this->collectIdsFromValue($item, $ids);
+            }
+
+            return;
+        }
+
+        if (!is_scalar($value)) {
+            return;
+        }
+
+        $text = trim((string) $value);
+
+        if ($text === '') {
+            return;
+        }
+
+        if ($text[0] === '[' || $text[0] === '{') {
+            $decoded = json_decode($text, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $this->collectIdsFromValue($decoded, $ids);
+                return;
+            }
+        }
+
+        if (strpos($text, ',') !== false) {
+            foreach (explode(',', $text) as $part) {
+                $this->collectIdsFromValue($part, $ids);
+            }
+
+            return;
+        }
+
+        if (preg_match('/^\d+$/', $text)) {
+            $id = (int) $text;
+
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+
+            return;
+        }
+
+        if (preg_match('/\[(\d+)\]\s*$/', $text, $match)) {
+            $id = (int) $match[1];
+
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+    }
+
+    private function extractRowValue($row, $keys)
+    {
+        if (!is_array($row)) {
+            return null;
+        }
+
+        foreach ((array) $keys as $key) {
+            if (!array_key_exists($key, $row)) {
+                continue;
+            }
+
+            $value = $row[$key];
+
+            return is_object($value) && property_exists($value, 'rawvalue') ? $value->rawvalue : $value;
+        }
+
+        return null;
+    }
+
+    private function extractPositiveInt($row, $keys, int $default): int
+    {
+        $value = $this->extractTextValue($row, $keys);
 
         if (!preg_match('/^\d+$/', $value)) {
             return max(1, $default);

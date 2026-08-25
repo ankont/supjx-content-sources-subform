@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="editors-xtd" method="upgrade" version="4.0">
+    <name>PLG_EDITORSXTD_SOURCESBUTTON</name>
+    <author>SuperSoft</author>
+    <creationDate>2026-05-02</creationDate>
+    <copyright>(C) SuperSoft</copyright>
+    <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
+    <authorEmail></authorEmail>
+    <authorUrl></authorUrl>
+    <version>1.2.13</version>
+    <description>PLG_EDITORSXTD_SOURCESBUTTON_XML_DESCRIPTION</description>
+
+    <namespace path="src">SuperSoft\Plugin\EditorsXtd\SourcesButton</namespace>
+
+    <files>
+        <folder plugin="sourcesbutton">services</folder>
+        <folder>src</folder>
+    </files>
+
+    <languages folder="language">
+        <language tag="en-GB">en-GB/en-GB.plg_editors-xtd_sourcesbutton.ini</language>
+        <language tag="en-GB">en-GB/en-GB.plg_editors-xtd_sourcesbutton.sys.ini</language>
+        <language tag="el-GR">el-GR/el-GR.plg_editors-xtd_sourcesbutton.ini</language>
+        <language tag="el-GR">el-GR/el-GR.plg_editors-xtd_sourcesbutton.sys.ini</language>
+    </languages>
+
+    <media destination="plg_editors-xtd_sourcesbutton" folder="media">
+        <folder>js</folder>
+        <folder>css</folder>
+    </media>
+    <config>
+        <fields name="params">
+            <fieldset name="basic">
+                <field
+                    name="editor_preview_mode"
+                    type="list"
+                    default="placeholder"
+                    label="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LABEL"
+                    description="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_DESC"
+                >
+                    <option value="none">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_NONE</option>
+                    <option value="placeholder">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_PLACEHOLDER</option>
+                    <option value="list_manual">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LIST_MANUAL</option>
+                    <option value="list_full">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LIST_FULL</option>
+                    <option value="render">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_RENDER</option>
+                </field>
+                <field
+                    name="editor_preview_max_items"
+                    type="number"
+                    default="20"
+                    min="1"
+                    label="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MAX_ITEMS_LABEL"
+                    description="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MAX_ITEMS_DESC"
+                    filter="integer"
+                />
+                <field
+                    name="badge_label"
+                    type="text"
+                    default=""
+                    hint="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_LABEL_HINT"
+                    label="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_LABEL_LABEL"
+                    description="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_LABEL_DESC"
+                />
+                <field
+                    name="badge_display"
+                    type="list"
+                    default="label_token"
+                    label="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL"
+                    description="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_DESC"
+                >
+                    <option value="label_token">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL_TOKEN</option>
+                    <option value="label_only">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL_ONLY</option>
+                    <option value="token_only">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_TOKEN_ONLY</option>
+                </field>
+            </fieldset>
+        </fields>
+    </config></extension>
