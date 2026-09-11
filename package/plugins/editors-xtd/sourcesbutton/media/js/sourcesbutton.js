@@ -12,6 +12,8 @@ import { JoomlaEditorButton } from 'editor-api';
   const PREVIEW_MODE = ['none', 'placeholder', 'list_manual', 'list_full', 'render'].includes(CONFIG.previewMode) ? CONFIG.previewMode : 'placeholder';
   const AJAX_URL = String(CONFIG.ajaxUrl || '').trim();
   const CSRF_TOKEN = String(CONFIG.csrfToken || '').trim();
+  const FONT_AWESOME_URL = String(CONFIG.fontAwesomeUrl || '').trim();
+  const CONFIG_ARTICLE_ID = parseInt(CONFIG.articleId || '0', 10);
   const previewCache = new Map();
   const TOKEN_RE = new RegExp('\\{\\s*' + escapeRegExp(TOKEN_NAME) + '\\s*(?::\\s*(rest|[1-9]\\d*)\\s*)?\\}', 'gi');
   const TOKEN_EXACT_RE = new RegExp('^\\s*\\{\\s*' + escapeRegExp(TOKEN_NAME) + '\\s*(?::\\s*(rest|[1-9]\\d*)\\s*)?\\}\\s*$', 'i');
@@ -28,6 +30,8 @@ import { JoomlaEditorButton } from 'editor-api';
   function getArticleId() {
     const selectors = [
       '#jform_id',
+      'input[name=\'jform[a_id]\']',
+      'input[name=\'a_id\']',
       'input[name="jform[id]"]',
       'input[name="id"]',
       'input[name="cid[]"]'
@@ -49,8 +53,21 @@ import { JoomlaEditorButton } from 'editor-api';
     }
 
     const params = new URLSearchParams(window.location.search || '');
-    const urlId = parseInt(params.get('id') || params.get('cid[]') || '0', 10);
-    return Number.isFinite(urlId) && urlId > 0 ? urlId : 0;
+    const urlId = parseInt(params.get('a_id') || params.get('id') || params.get('cid[]') || '0', 10);
+    if (Number.isFinite(urlId) && urlId > 0) return urlId;
+
+    const forms = document.querySelectorAll('form[action]');
+    for (let i = 0; i < forms.length; i += 1) {
+      try {
+        const action = new URL(forms[i].getAttribute('action') || '', window.location.href);
+        const actionId = parseInt(action.searchParams.get('a_id') || action.searchParams.get('id') || '0', 10);
+        if (Number.isFinite(actionId) && actionId > 0) return actionId;
+      } catch (error) {
+        // Ignore malformed form actions and continue with the remaining fallbacks.
+      }
+    }
+
+    return Number.isFinite(CONFIG_ARTICLE_ID) && CONFIG_ARTICLE_ID > 0 ? CONFIG_ARTICLE_ID : 0;
   }
 
   function normalisePreviewPayload(json) {
@@ -273,14 +290,36 @@ import { JoomlaEditorButton } from 'editor-api';
     const tag = tagForMode(mode);
     const wrap = doc.createElement(tag);
     wrap.innerHTML = buildTokenHtml(token, overrideMode);
-    const node = wrap.firstElementChild;
-    refreshPreview(node);
-    return node;
+    return wrap.firstElementChild;
   }
 
   function setPreviewBody(node, html) {
     const body = node && node.querySelector ? node.querySelector('.sources-editor-token__body') : null;
     if (body && body.innerHTML !== html) body.innerHTML = html;
+  }
+
+  function ensureFontAwesome(doc) {
+    if (!FONT_AWESOME_URL || !doc || !doc.head || !doc.querySelector) return;
+    if (doc.querySelector('link[data-sourcesbutton-fontawesome],link[href*=joomla-fontawesome]')) return;
+
+    const link = doc.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = FONT_AWESOME_URL;
+    link.setAttribute('data-sourcesbutton-fontawesome', '1');
+    doc.head.appendChild(link);
+  }
+
+  function getPreviousTokens(node) {
+    if (!node || !node.isConnected || !node.ownerDocument || !node.ownerDocument.querySelectorAll) return [];
+
+    const nodes = Array.from(node.ownerDocument.querySelectorAll('.sources-editor-token[data-sources-token]'));
+    const position = nodes.indexOf(node);
+    if (position <= 0) return [];
+
+    return nodes
+      .slice(0, position)
+      .map((item) => normalizeToken(item.getAttribute('data-sources-token') || ''))
+      .filter(Boolean);
   }
 
   function refreshPreview(node) {
@@ -290,6 +329,10 @@ import { JoomlaEditorButton } from 'editor-api';
 
     if (!canUseServerPreview(mode)) {
       return;
+    }
+
+    if (mode === 'render') {
+      ensureFontAwesome(node.ownerDocument);
     }
 
     const token = node.getAttribute('data-sources-token') || '';
@@ -303,7 +346,9 @@ import { JoomlaEditorButton } from 'editor-api';
       return;
     }
 
-    const cacheKey = articleId + '|' + mode + '|' + token;
+    const previousTokens = getPreviousTokens(node);
+    const contextKey = previousTokens.join('|');
+    const cacheKey = articleId + '|' + mode + '|' + token + '|' + contextKey;
     if (node.getAttribute('data-sources-preview-key') === cacheKey && node.getAttribute('data-sources-preview-state') === 'loading') return;
 
     if (previewCache.has(cacheKey)) {
@@ -322,6 +367,7 @@ import { JoomlaEditorButton } from 'editor-api';
     params.set('task', 'preview');
     params.set('article_id', String(articleId));
     params.set('token', token);
+    params.set('previous_tokens', JSON.stringify(previousTokens));
     params.set('mode', mode);
     if (CSRF_TOKEN) params.set(CSRF_TOKEN, '1');
 
@@ -334,7 +380,7 @@ import { JoomlaEditorButton } from 'editor-api';
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('HTTP ' + response.status)))
       .then((json) => {
         const payload = normalisePreviewPayload(json);
-        const html = payload && typeof payload.html === 'string' && payload.html ? payload.html : escapeHtml(t('saveToPreview', 'Save the article to preview the Sources output.'));
+        const html = payload && typeof payload.html === 'string' ? payload.html : escapeHtml(t('saveToPreview', 'Save the article to preview the Sources output.'));
         previewCache.set(cacheKey, html);
         setPreviewBody(node, html);
         node.setAttribute('data-sources-preview-state', 'done');
@@ -352,15 +398,19 @@ import { JoomlaEditorButton } from 'editor-api';
     TOKEN_RE.lastIndex = 0;
 
     const frag = doc.createDocumentFragment();
+    const tokenNodes = [];
     let last = 0;
     let match;
     while ((match = TOKEN_RE.exec(text)) !== null) {
       if (match.index > last) frag.appendChild(doc.createTextNode(text.slice(last, match.index)));
-      frag.appendChild(makeTokenNode(doc, match[0]));
+      const tokenNode = makeTokenNode(doc, match[0]);
+      tokenNodes.push(tokenNode);
+      frag.appendChild(tokenNode);
       last = match.index + match[0].length;
     }
     if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
     node.parentNode.replaceChild(frag, node);
+    tokenNodes.forEach((tokenNode) => refreshPreview(tokenNode));
   }
 
   function restoreTokens(doc) {
@@ -441,6 +491,7 @@ import { JoomlaEditorButton } from 'editor-api';
             const nextNode = makeTokenNode(doc, normalizeToken(token), mode);
             nextNode.classList.add('sources-editor-token--toolbar-open');
             tokenNode.replaceWith(nextNode);
+            refreshPreview(nextNode);
           }
         }
       });

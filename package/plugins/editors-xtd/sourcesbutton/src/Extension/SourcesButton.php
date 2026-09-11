@@ -39,7 +39,9 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
 
     public function onEditorButtonsSetup(EditorButtonsSetupEvent $event): void
     {
-        if (!Factory::getApplication()->isClient('administrator')) {
+        $app = Factory::getApplication();
+
+        if (!$app->isClient('administrator') && !$app->isClient('site')) {
             return;
         }
 
@@ -74,6 +76,11 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         $articleId = (int) $input->getInt('article_id', 0);
         $token     = trim((string) $input->getString('token', ''));
         $mode      = (string) $input->getCmd('mode', 'placeholder');
+        $previousTokens = json_decode((string) $input->getString('previous_tokens', '[]'), true);
+
+        if (!is_array($previousTokens)) {
+            $previousTokens = [];
+        }
 
         if (!in_array($mode, ['placeholder', 'list_manual', 'list_full', 'render'], true)) {
             $mode = 'placeholder';
@@ -104,10 +111,11 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
             return $this->sendPreviewResponse(false, $this->noticeHtml(Text::_('PLG_EDITORSXTD_SOURCESBUTTON_SAVE_TO_PREVIEW')), 'sources_rows_empty:' . $fieldName);
         }
 
-        $selection = $this->parseToken($token, $tokenName, count($rows));
+        $renderedIndices = $this->collectRenderedIndices($previousTokens, $tokenName, count($rows));
+        $selection       = $this->parseToken($token, $tokenName, count($rows), $renderedIndices);
 
         if ($selection['indices'] === []) {
-            return $this->sendPreviewResponse(false, $this->noticeHtml(Text::_('PLG_EDITORSXTD_SOURCESBUTTON_SAVE_TO_PREVIEW')), 'preview_unavailable');
+            return $this->sendPreviewResponse(true, '', '');
         }
 
         if ($mode === 'render') {
@@ -143,6 +151,8 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         $media         = rtrim(Uri::root(true), '/') . '/media/plg_editors-xtd_sourcesbutton';
         $scriptVersion = $this->getMediaVersion('js/sourcesbutton.js');
         $contentParams = $this->getContentSourcesParams();
+        $input         = Factory::getApplication()->getInput();
+        $articleId     = max((int) $input->getInt('id', 0), (int) $input->getInt('a_id', 0));
         $previewMode   = (string) $this->params->get('editor_preview_mode', 'placeholder');
         $badgeDisplay  = (string) $this->params->get('badge_display', 'label_token');
 
@@ -156,12 +166,14 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
 
         $config = [
             'tokenName'       => trim((string) $contentParams->get('token_name', 'sources')) ?: 'sources',
+            'articleId'       => $articleId,
             'subformName'     => trim((string) $contentParams->get('subform_field_name', 'blocks')) ?: 'blocks',
             'previewMode'     => $previewMode,
             'previewMaxItems' => max(1, (int) $this->params->get('editor_preview_max_items', 20)),
             'badgeLabel'      => trim((string) $this->params->get('badge_label', 'Sources')) ?: 'Sources',
             'badgeDisplay'    => $badgeDisplay,
             'ajaxUrl'         => 'index.php?option=com_ajax&plugin=sourcesbutton&group=editors-xtd&format=json',
+            'fontAwesomeUrl'  => rtrim(Uri::root(true), '/') . '/media/system/css/joomla-fontawesome.min.css',
             'csrfToken'       => Session::getFormToken(),
             'i18n'            => [
                 'modalTitle'           => Text::_('PLG_EDITORSXTD_SOURCESBUTTON_MODAL_TITLE'),
@@ -442,7 +454,28 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         return $normalised;
     }
 
-    private function parseToken(string $token, string $tokenName, int $total): array
+    private function collectRenderedIndices(array $tokens, string $tokenName, int $total): array
+    {
+        $renderedIndices = [];
+
+        foreach ($tokens as $token) {
+            if (!is_string($token)) {
+                continue;
+            }
+
+            $selection = $this->parseToken($token, $tokenName, $total, $renderedIndices);
+
+            foreach ($selection['indices'] as $idx) {
+                if (!in_array($idx, $renderedIndices, true)) {
+                    $renderedIndices[] = $idx;
+                }
+            }
+        }
+
+        return $renderedIndices;
+    }
+
+    private function parseToken(string $token, string $tokenName, int $total, array $renderedIndices = []): array
     {
         $pattern = '/^\{\s*' . preg_quote($tokenName, '/') . '\s*(?::\s*(rest|[1-9]\d*)\s*)?\}$/i';
 
@@ -457,7 +490,15 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         }
 
         if ($arg === 'rest') {
-            return ['mode' => 'rest', 'indices' => range(0, max(0, $total - 1))];
+            $indices = [];
+
+            for ($idx = 0; $idx < $total; $idx++) {
+                if (!in_array($idx, $renderedIndices, true)) {
+                    $indices[] = $idx;
+                }
+            }
+
+            return ['mode' => 'rest', 'indices' => $indices];
         }
 
         $idx = (int) $arg - 1;
