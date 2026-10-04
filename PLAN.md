@@ -213,6 +213,16 @@ In `1.1.11`, preview parsing was broadened for manual selections:
 
 ## Later Improvements
 
+### Sources Builder - 1.3.0
+
+- Implemented a shared frontend/backend Builder over the unchanged native Joomla subform.
+- Added collapsible numbered blocks, add/duplicate/delete/reorder, grouped field controls, and a Classic form fallback.
+- Integrated the public SmartBrowser Articles Collection View with one reusable instance per block; resource rendering, ordering, removal, and unavailable states stay owned by SmartBrowser.
+- Add Sources uses the existing picker and appends/deduplicates its ordered selection. Existing Articles multi-selection preselection is not supported by the current public picker API.
+- Native fields remain the submitted source of truth. No Sources button/modal changes, storage changes, or token changes.
+- Passed seven synchronization/lifecycle tests using the real Joomla subform implementation, plus desktop/mobile Chrome checks using the actual SmartBrowser Collection renderer with mocked transport/picker.
+- Remaining installation QA: frontend and backend Save/Apply/Reload, legacy articles, and actual site-specific fancy-select/SmartBrowser endpoints. Builder requires SmartBrowser 1.7.0+; unavailable integration keeps Classic accessible.
+
 - Make the insertion dialog list actual saved Sources blocks with their titles.
 - Allow choosing a block by title instead of manually entering a number.
 - Show whether each block has manual selections and/or automatic criteria inside the insertion dialog.

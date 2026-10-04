@@ -1,0 +1,12 @@
+{
+  "name": "sources-builder-verification",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "playwright": "1.56.1"
+  }
+}

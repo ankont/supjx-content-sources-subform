@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body><main style="max-width:1080px;margin:24px auto;padding:16px"><form id="article-form">
+<div class="control-group"><label for="merge-blocks">Unified sources list</label><select name="jform[com_fields][merge-blocks]" id="merge-blocks"><option value="0">No</option><option value="1">Yes</option></select></div>
+<div class="control-group"><label>Source blocks</label>
+<joomla-field-subform name="jform[com_fields][blocks]" button-add=".group-add" button-remove=".group-remove" button-move=".group-move" repeatable-element=".subform-repeatable-group" minimum="0" maximum="20">
+<button type="button" class="group-add">Add native block</button>
+<div class="subform-repeatable-group" data-group="row0" data-base-name="row">
+<div class="control-group"><label for="title0">Block title</label><input id="title0" name="jform[com_fields][blocks][row0][field10]" value="Embedded articles"></div>
+<div class="control-group"><label for="layout0">Display</label><select id="layout0" name="jform[com_fields][blocks][row0][field11]"><option value="cards">Cards</option><option value="list">List</option></select></div>
+<div class="control-group"><label for="sources0">Selected sources</label><select id="sources0" name="jform[com_fields][blocks][row0][field12][]" multiple><option value="11" selected>Galaxy</option><option value="4" selected>New Testament</option><option value="99" selected>Unavailable reference</option><option value="2">Seminar</option></select></div>
+<div class="control-group"><label for="tags0">Tags (all apply)</label><select id="tags0" name="jform[com_fields][blocks][row0][field13][]" multiple><option value="8" selected>Middle and upper</option><option value="12" selected>Saints</option><option value="7">Art</option></select></div>
+<div class="control-group"><label for="cats0">Source categories</label><select id="cats0" name="jform[com_fields][blocks][row0][field14][]" multiple><option value="14" selected>Painting</option><option value="15">Books</option></select></div>
+<div class="control-group"><label for="limit0">Source limit</label><input id="limit0" name="jform[com_fields][blocks][row0][field15]" type="number" min="0" value="16"></div>
+<button type="button" class="group-remove">Remove native block</button>
+</div>
+<template class="subform-repeatable-template-section">
+<div class="subform-repeatable-group" data-group="rowX" data-base-name="row">
+<div class="control-group"><label for="titleX">Block title</label><input id="titleX" name="jform[com_fields][blocks][rowX][field10]" value=""></div>
+<div class="control-group"><label for="layoutX">Display</label><select id="layoutX" name="jform[com_fields][blocks][rowX][field11]"><option value="cards">Cards</option><option value="list">List</option></select></div>
+<div class="control-group"><label for="sourcesX">Selected sources</label><select id="sourcesX" name="jform[com_fields][blocks][rowX][field12][]" multiple><option value="11">Galaxy</option><option value="4">New Testament</option><option value="99">Unavailable reference</option><option value="2">Seminar</option></select></div>
+<div class="control-group"><label for="tagsX">Tags (all apply)</label><select id="tagsX" name="jform[com_fields][blocks][rowX][field13][]" multiple><option value="8">Middle and upper</option><option value="12">Saints</option><option value="7">Art</option></select></div>
+<div class="control-group"><label for="catsX">Source categories</label><select id="catsX" name="jform[com_fields][blocks][rowX][field14][]" multiple><option value="14">Painting</option><option value="15">Books</option></select></div>
+<div class="control-group"><label for="limitX">Source limit</label><input id="limitX" name="jform[com_fields][blocks][rowX][field15]" type="number" min="0" value="16"></div>
+<button type="button" class="group-remove">Remove native block</button>
+</div>
+</template>
+</joomla-field-subform></div><button type="submit">Save</button>
+</form></main></body></html>

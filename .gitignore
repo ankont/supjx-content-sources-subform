@@ -1,3 +1,5 @@
 /build/output/
 /build/stage/
 /build/*.zip
+/node_modules/
+/tests/artifacts/

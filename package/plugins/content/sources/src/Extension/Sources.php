@@ -15,6 +15,17 @@ final class Sources extends CMSPlugin
 {
     protected $autoloadLanguage = true;
 
+    public function onContentPrepareForm(\Joomla\CMS\Form\Form $form, $data): void
+    {
+        if (!in_array($form->getName(), ['com_content.article', 'com_content.form'], true)) {
+            return;
+        }
+
+        \SuperSoft\Plugin\Content\Sources\Support\SourcesBuilder::prepare(
+            trim((string) $this->params->get('subform_field_name', 'blocks')) ?: 'blocks'
+        );
+    }
+
     public function onContentPrepare($context, &$article, &$params, $page = 0): void
     {
         if (!is_string($context) || !$this->isSupportedContentContext($context)) {

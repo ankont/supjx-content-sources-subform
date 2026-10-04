@@ -1,4 +1,4 @@
-# Sources Package (Joomla)
+# SuperSoftJx - Sources
 
 `pkg_sources` installs the Sources content plugin and an editor button plugin for Joomla authoring workflows.
 
@@ -95,3 +95,13 @@ git push origin v1.0.0
 ```
 
 Generated ZIP artifacts are intentionally kept out of git history.
+
+## Sources Builder (1.3.0)
+
+The article Source Blocks tab defaults to a Sources Builder in both site and administrator article forms. Each block has a collapsible card, sequential block number, move controls, Duplicate/Delete menu, and its own SmartBrowser Articles Collection View. The existing Joomla fields remain the only submitted source of truth: no field names, stored formats, or Sources tokens change.
+
+The bottom-right Classic form toggle exposes the original native form. Returning to the Builder reads its current values. Missing SmartBrowser support or an integration failure leaves the native form accessible.
+
+The Builder requires SmartBrowser 1.7.0+ with the public Collection View and picker APIs. Collections resolve/render selected resources and provide ordering/removal. Add Sources appends the picker's returned Articles in order, deduplicating existing selections; the current Articles picker API does not support preselecting an existing multi-selection.
+
+Verification: `npm.cmd test` exercises the real Joomla subform lifecycle with mocked Collection/picker APIs. `node tests/browser-verify.mjs` exercises the real sibling SmartBrowser Collection renderer in desktop/mobile Chrome with mocked API responses and picker results. Live Joomla installation, Save/Apply, and reload should additionally be checked in both article editors before release.
