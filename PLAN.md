@@ -1,6 +1,186 @@
 # Sources Package Plan
 
-_Last updated: 2026-05-02_
+_Last updated: 2026-10-17_
+
+### 4.0.0 Major Release
+
+- Publish the complete Sources redesign as 4.0.0; all packaged plugin versions aligned.
+- Include inline JSON Containers, shared Builder/optional Sources field, SmartBrowser shared Picker/output and overrideable sources.item.
+- Preserve schema version 2 and temporary legacy rendering; require SmartBrowser 3.16.0+.
+- Upgrade guidance and known template/frontend-form limitations documented in docs/RELEASE_4.0.0.md.
+
+### 3.3.1 Overrideable Sources Item
+
+- Moved default item composition into packaged layouts/sources/item.php.
+- Pass item, layout, prepared selected, purpose and parent_article_id to sources.item.
+- Default fallback comes after normal Joomla template/parent paths; backend preview also checks the default site template override.
+- Sources owns access/preparation, recursion and buffer cleanup around the override.
+- No visual pre-render or finalization is imposed; overrides can call SelectionOutputRenderer exactly where needed.
+- Tests cover actual Joomla FileLayout priority, default behavior, custom/no-visual output, one presentation, data contract, recursion and error recovery.
+
+### 3.3.0 Shared Resource Output
+
+- Require SmartBrowser 3.16.0; use readonly prepared selections and SelectionOutputRenderer per resource.
+- Confirmed smartbrowser.resource -> template catichisi.identity composition contract; generic fallback remains SmartBrowser-owned.
+- Removed Sources image/icon composition, article image rewriting and direct legacy card/content layout calls from modern output.
+- All five layout shells, block ordering/filtering, summaries and Contents bodies remain Sources-owned; stored schema and legacy bridge unchanged.
+- AJAX previews pass purpose=preview, carry presentation styles, retain server image markers and ignore stale responses.
+- Shared PHP renderer tests cover generic/override output, all modes, unavailable selections, Usage/metadata and exactly-once hooks.
+- Site-specific article action bars/chips from old library layouts are not part of the new resource contract; see docs/SHARED_OUTPUT.md.
+
+### 3.2.6 SmartBrowser Shared Picker Operations
+
+- Require SmartBrowser 3.14.0+; primary Collections supply pickerUrl and adapter/type/target constraints.
+- Removed Sources onAdd/onReplace overrides and per-item replacement merging.
+- Collection onChange stores the full selection once, retaining Usage; independent compact/filter pickers remain.
+- Tests exercise actual sibling SmartBrowser shared Picker code for all three adapters, cancellation, duplicate Add, full replacement, focus, extension preservation and errors.
+- No JSON schema, frontend rendering or legacy-compatibility changes.
+
+### 3.2.5 Field Error Presentation
+
+- SmartBrowser/Builder errors no longer automatically expose the raw JSON textarea.
+- Original data remains accessible through a closed, translated advanced disclosure.
+- Storage, validation and compatibility behavior remain unchanged.
+
+### 3.2.4 Temporary Legacy Rendering
+
+- Reintroduced read-only legacy Custom Field rendering via the existing template sources.php.
+- Compatibility defaults on, with a content-plugin switch; supports numbered/rest tokens and append.
+- Modern inline/field configurations take precedence; no old definitions or values are deleted.
+- Native forms and the modern Builder remain unchanged. Frontend form binding is a separate issue.
+
+### 3.2.3 Details Follow-Up and Preview CSS Cache
+
+- Found an unversioned iframe CSS URL: package upgrades could leave cached preview styles even when the outer page assets refreshed.
+- CSS content hash now versions both the outer Builder stylesheet and iframe contentCss URL; reused editor documents refresh stale stylesheet links.
+- Rendered blocks expose additive sources-layout--LAYOUT classes. Preview Details no longer depends on direct-child template markup; wrappers/cards have bounded full widths.
+- Added actual SourcesButton asset-bootstrap regression plus real-editor stale-link/wrapped-card tests. No template edits or claim of authenticated live-site reproduction.
+- Corrected the JCE fixture's default 300px iframe and explicitly assert a preview wider than 767px in desktop runs; checked both wide and narrow layouts and SmartCrop bounds.
+
+### 3.2.2 Stable Preview Columns With Headings
+
+- Stable scrollbar gutters in the bounded editor preview and field Preview document prevent vertical-scroll onset from reducing available card width.
+- Browser regression adds/removes a heading across the preview's 600px scroll threshold and verifies equal width/column count, with unchanged stored tokens.
+- Preview-only change; no frontend layout, storage or selection semantics changed.
+
+### 3.2.1 Editor Preview Dimensions
+
+- Preview-only layout constraints for library cards, with full-width Details rows and container-width stacking instead of outer viewport breakpoints.
+- Custom-field Preview iframe uses the same scoped surface class/rules. No frontend layout or stored JSON changes.
+- Ordinary thumbnail bounds are constrained; SmartCrop frames and overscan are not overridden.
+- Actual template CSS browser regressions cover 520/900px constraints, desktop/mobile, TinyMCE/JCE and Atum/Cassiopeia; tokens remain unchanged.
+- Full site styling still requires the editor/preview document's configured stylesheets; automatic frontend-template asset loading is not introduced.
+
+### 3.2.0 Selection Usage
+
+- Editable Usage profiles in every Sources Collection View/Picker, including optional taxonomy pickers. Name/image primary; icon/presentation secondary and initially closed.
+- Schema-v2 arrays accept old numeric IDs and canonical SmartBrowser entries carrying Usage. No parallel reference/Usage stores.
+- Usage and ext.* metadata survive ordering, replacement, duplication, dropdown changes, inline serialization and native custom-field save/reopen.
+- Article title/image overrides use clones and the real public SmartBrowser readonly resolution API. Native ACL/selection criteria remain unchanged.
+- Template displayData includes sources_usage and sources_visual. Advanced visuals are implemented by the standalone fallback; existing template overrides must consume this contract themselves.
+- SmartCrop effective-article-thumbnail editing remains extension-owned. Reserved metadata is preserved, not executed or interpreted.
+- Added client/server parity, actual SmartBrowser PHP API, renderer and browser editable/Advanced UI tests.
+
+### 3.1.0 Optional Sources Custom Field
+
+- Added Fields - Sources as a third, optional packaged plugin; no automatic Field Group, category assignment, legacy conversion or data deletion.
+- Shared SourcesBuilder supports embedded editing without its own nested form/dialog. Inline editing is unchanged.
+- Native custom-field JSON is the sole persisted configuration for each field. Schema-v2 parsing, RAW filtering, validation, field edit permissions and readable-JSON fallback use Joomla Form APIs.
+- Standard Joomla Fields rendering owns placement and access; new Sources fields default to After Display, without a second append hook.
+- Preview renders the unsaved draft using the existing protected AJAX renderer, isolated in a script-disabled iframe.
+- Tests cover real Joomla Form/Rule/asset APIs and embedded editing/preview/reload across frontend/backend, TinyMCE/JCE and desktop/mobile. No authenticated live-site installation claim.
+
+### 3.0.5 Preview Lists and Initial Block
+
+- Editor list previews now use bullet lists with padding and separated criteria.
+- New Containers start with one specific-articles block; deleting the last block remains supported.
+
+### 3.0.4 Editor Preview AjaxEvent Fix
+
+- Root defect: the Sources AJAX listener is a modern SubscriberInterface handler. com_ajax reads the dispatched event's result, not its PHP return value. The handler now accepts AjaxEvent and calls addResult().
+- Added real Joomla Dispatcher/AjaxEvent/JsonResponse regression, explicitly reproducing the old ignored return. App/session/rendering collaborators are fixtures; no live-site database claim.
+- Preview diagnostics now distinguish permission/session, malformed/empty responses, unsupported config, disabled content plugin and rendering failures; private server details stay in logs.
+- Fifteen automated tests plus browser error/recovery coverage across the eight editor/template/viewport combinations. Source JSON is unchanged on failure.
+
+### 3.0.3 Block Sequence Note
+
+- A translated note beside Merged ordering explains that each block is ordered separately when Block Sequence is selected. Common Ordering replaces the note with the existing sort selector; no storage or rendering changes.
+
+### 3.0.2 Consolidated Ordering And Identity
+
+- Removed Group by selected category UI/behavior. Category-and-article ordering uses Builder category sequence for category blocks; tag blocks and Common Ordering use Joomla category tree order, then article ordering/ID.
+- Other sorts remain ungrouped. Tags remain AND; OR/grouped tag lists use separate merged blocks.
+- Merged ignores all per-block limits and hides their controls; only the final Container limit applies after combining, deduplication and sorting. Separate limits are preserved. Internal candidate/request/output safety caps remain.
+- One stored title: Label/Λεζάντα in Separate, Name/Όνομα in Merged. Header uses this value or the type fallback. Previous name/group fields are accepted only as deprecated inputs, not emitted.
+- A single visible Filters/advanced control occupies the full row.
+- Validation and browser regressions cover both merged modes, limit visibility, one-field naming, removed grouping and full-width controls.
+
+### 3.0.1 Builder Clarity
+
+- Fresh Builder drafts start with one specific-articles block; delete-last is allowed. Empty drafts cannot be inserted/updated as invalid Containers.
+- Editor list previews use semantic bullet lists with padding and separated criteria; live rendering and token storage stay unchanged.
+- Add actions have explicit Add/Προσθήκη wording and gray/bold block-header styling.
+- Full Selection View (grid, preview, list and ordering) is shared across Articles/Categories/Tags, with per-adapter references.
+- Manual blocks have no limit control and always include all accessible explicitly selected articles (bounded safety cap). Merged container limits still apply.
+- Optional name is the administrative Title; existing title is now the Separate Label/Λεζάντα. Names never render.
+- Merged hides block Layout/Label. Common order hides block order/grouping; Block Sequence hides the general order. Values are retained.
+- Category grouping creates contiguous results, not new headings. Tags remain AND; their selection order does not change output semantics.
+- Fourteen automated regressions include empty drafts, last deletion and name/label separation.
+
+### 3.0.0 Typed Blocks / Schema 2
+
+- Agreed architecture: three add actions for specific Articles, Articles from Categories and Articles from Tags; no mixed blocks.
+- Dynamic primary criterion must be nonempty. Optional cross-filters are conjunctive; tags continue to use AND and categories match exact IDs.
+- Category grouping respects category selection order; dynamic articles support publication, creation, title and Joomla ordering with ID tie-breakers.
+- Merged containers choose block sequence or common ordering; common ordering disables ignored internal ordering controls but retains settings.
+- Primary category/tag UI uses matching SmartBrowser Collections by default; a shared Button plugin setting switches both to compact native fields with node pickers. Optional filters remain dropdowns.
+- Insert is native btn-success. No legacy inline migration/compatibility and no Custom Field deletions, per user direction.
+- Twelve automated tests cover validation, both UI modes, typed queries, merging and ACL. Eight browser runs cover Atum/Cassiopeia, TinyMCE/JCE, desktop/mobile, node pickers, save/reopen, green Insert and dropdown hit-tests.
+
+### 2.0.4 Native Controls And Atum
+
+- Footer buttons now use only native Joomla btn classes and icon classes, not Sources button skins. Both frontend and backend inherit their respective template appearance.
+- Scoped details resets neutralize Atum margins/padding and details-content overflow clipping for layout, advanced filters and block menus.
+- Verification loads actual Atum and Cassiopeia styles with both TinyMCE/JCE on desktop/mobile.
+- Article Selection Usage remains a SmartBrowser enhancement (agreed with user): displayed-name fallback, thumbnail/icon/both and SmartCrop. Sources follow-up must persist/apply usage rather than silently discard it. See docs/SMARTBROWSER_UI_FOLLOWUP.md.
+
+### 2.0.3 Builder Details
+
+- Greek title: Compose Sources (Σύνθεση πηγών); all titles remain language keys.
+- Footer uses red cancel and icon submit actions; delete is directly beside reorder controls.
+- Icon layout dropdown preserves native select value and the JSON schema.
+- Reconcile connected native taxonomy widgets from the block draft; preserve default selections, clear Choices store before replacing choices, avoid needless DOM reconnects.
+- Local dropdown stacking above Selection View; source controls recovered after editor sanitization with capture-phase click handling.
+- Browser regressions cover Update/reopen native selections and real editor gear/mode clicks.
+- Sources already isolates SmartBrowser view preferences with supjx.sources.selection; all Sources collections intentionally share that UI preference (not stored in content).
+- URI editing and preview position presentation belong to SmartBrowser: see docs/SMARTBROWSER_UI_FOLLOWUP.md. No shared SmartBrowser code changed.
+
+## Current Architecture - 2.0.0
+
+### 2.0.2 Selection And Filter UI
+
+- Sources Collections now use the same selected-resources presentation as SmartBrowser Fields, including Info panel and integrated Add/Replace actions; one persistent reference collection per block.
+- Block Title/Layout/selection Limit use the same one-row layout as merged settings. The per-block layout remains visible but disabled in merged mode; its value is retained.
+- Tags/categories use native Joomla Tag/Category fancy-select templates without submitted field names or new storage. Advanced ellipsis actions open the matching SmartBrowser adapters with node selection and synchronize the controls.
+- Filters default open with an explicit rotating chevron. Block collapse now switches between right/down chevrons.
+- Eleven automated tests pass, plus actual TinyMCE/JCE, Choices.js and SmartBrowser Selection/Picker browser checks across desktop/mobile. Verified picker-to-field and field-to-JSON synchronization, per-item replacement, unique control IDs and one-row alignment.
+
+### 2.0.1 Asset Loading Fix
+
+- Fixed Sources button and frontend CSS WebAsset registrations: Joomla's relative resolver inserts js/css itself.
+- Confirmed the old paths resolve to an empty URL, explaining the missing sourcesbutton:insert handler.
+- Added a real Joomla WebAssetItem/HTMLHelper regression test for root and subdirectory installations; all nine automated tests pass.
+- The user identified the separate LOGIC_VERSION error as coming from the Pinterest Save Button browser extension; it is unrelated to Sources.
+
+- Replaced external Custom Fields configuration with self-contained version 1 inline JSON Containers.
+- Added bounded PHP/JS schema validation and nesting-aware token parsing, preserving invalid/future tokens.
+- Sources button now opens a draft-based Container Builder: Separate/Merged, collapsible blocks, duplicate/delete/reorder, selection, presentation and filters.
+- Integrated public SmartBrowser reference Collection/Picker APIs, initial selections, independent instances, unavailable references and native dialog focus handling.
+- Kept visual chips and preview modes with real JSON restoration for source/save. Tested native JCE content dispatchers, Unicode serialization, cursor insertion, independent edits, cancellation, undo/redo and editor reload.
+- Reused the resource layout pipeline and manual-first / all-tags matching behavior. Added explicit article/category/ancestor access, publication-window and language guards.
+- Removed the native-subform/Classic bridge, numbered tokens, saved-field AJAX previews and automatic append. No installer deletes existing articles or Custom Field data.
+- Remaining installation QA: real frontend/backend Joomla Save/Apply/Reload, article history, live database ACL/scheduling, site-specific layouts and full JCE profile/source-tab extensions.
+- README and docs/inline-sources.schema.json describe the new contract. Sections below are historical 1.x notes, not requirements for 2.0.
 
 ## Goal
 
@@ -228,3 +408,8 @@ In `1.1.11`, preview parsing was broadened for manual selections:
 - Show whether each block has manual selections and/or automatic criteria inside the insertion dialog.
 - Consider a shared helper if parsing/rendering logic between the two plugins grows further.
 - Add automated PHP lint/build checks once PHP is available in the local environment.
+## Sources Builder Dialog Polish (2.0.2)
+
+- Shared SmartBrowser dialog shell and public maximize/restore helper, with independent remembered size.
+- Header window controls, accessible dialog title, scroll-lock cleanup and optional-helper fallback.
+- Browser verification covers maximize/restore dimensions on desktop/mobile in TinyMCE and JCE.

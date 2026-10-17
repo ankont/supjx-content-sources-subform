@@ -7,7 +7,7 @@
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
     <authorEmail></authorEmail>
     <authorUrl></authorUrl>
-    <version>1.3.0</version>
+    <version>4.0.0</version>
     <description>PLG_EDITORSXTD_SOURCESBUTTON_XML_DESCRIPTION</description>
 
     <namespace path="src">SuperSoft\Plugin\EditorsXtd\SourcesButton</namespace>
@@ -31,6 +31,10 @@
     <config>
         <fields name="params">
             <fieldset name="basic">
+                <field name="taxonomy_editor" type="list" default="collection" label="PLG_EDITORSXTD_SOURCESBUTTON_TAXONOMY_EDITOR_LABEL" description="PLG_EDITORSXTD_SOURCESBUTTON_TAXONOMY_EDITOR_DESC">
+                    <option value="collection">PLG_EDITORSXTD_SOURCESBUTTON_TAXONOMY_COLLECTION</option>
+                    <option value="compact">PLG_EDITORSXTD_SOURCESBUTTON_TAXONOMY_COMPACT</option>
+                </field>
                 <field
                     name="editor_preview_mode"
                     type="list"
@@ -38,21 +42,12 @@
                     label="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LABEL"
                     description="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_DESC"
                 >
-                    <option value="none">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_NONE</option>
-                    <option value="placeholder">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_PLACEHOLDER</option>
-                    <option value="list_manual">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LIST_MANUAL</option>
-                    <option value="list_full">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_LIST_FULL</option>
-                    <option value="render">PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MODE_RENDER</option>
+                    <option value="none">PLG_EDITORSXTD_SOURCESBUTTON_INLINE_NONE</option>
+                    <option value="placeholder">PLG_EDITORSXTD_SOURCESBUTTON_INLINE_PLACEHOLDER</option>
+                    <option value="list_manual">PLG_EDITORSXTD_SOURCESBUTTON_INLINE_LIST_MANUAL</option>
+                    <option value="list_full">PLG_EDITORSXTD_SOURCESBUTTON_INLINE_LIST_FULL</option>
+                    <option value="render">PLG_EDITORSXTD_SOURCESBUTTON_INLINE_RENDER</option>
                 </field>
-                <field
-                    name="editor_preview_max_items"
-                    type="number"
-                    default="20"
-                    min="1"
-                    label="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MAX_ITEMS_LABEL"
-                    description="PLG_EDITORSXTD_SOURCESBUTTON_EDITOR_PREVIEW_MAX_ITEMS_DESC"
-                    filter="integer"
-                />
                 <field
                     name="badge_label"
                     type="text"
@@ -61,17 +56,6 @@
                     label="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_LABEL_LABEL"
                     description="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_LABEL_DESC"
                 />
-                <field
-                    name="badge_display"
-                    type="list"
-                    default="label_token"
-                    label="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL"
-                    description="PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_DESC"
-                >
-                    <option value="label_token">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL_TOKEN</option>
-                    <option value="label_only">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_LABEL_ONLY</option>
-                    <option value="token_only">PLG_EDITORSXTD_SOURCESBUTTON_BADGE_DISPLAY_TOKEN_ONLY</option>
-                </field>
             </fieldset>
         </fields>
     </config></extension>

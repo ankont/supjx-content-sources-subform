@@ -8,7 +8,7 @@
     <authorUrl></authorUrl>
     <copyright>© 2026 SuperSoft — Kontarinis Andreas</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
-    <version>1.3.0</version>
+    <version>4.0.0</version>
     <description>PKG_SOURCES_XML_DESCRIPTION</description>
 
     <languages folder="language">
@@ -21,5 +21,6 @@
     <files folder="packages">
         <file type="plugin" id="sources" group="content">plg_content_sources.zip</file>
         <file type="plugin" id="sourcesbutton" group="editors-xtd">plg_editors_xtd_sourcesbutton.zip</file>
+        <file type="plugin" id="sources" group="fields">plg_fields_sources.zip</file>
     </files>
 </extension>

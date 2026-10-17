@@ -6,6 +6,7 @@ $packageRoot = Join-Path $repoRoot 'package'
 $packageManifestPath = Join-Path $packageRoot 'pkg_sources.xml'
 $contentPluginRoot = Join-Path $packageRoot 'plugins\content\sources'
 $editorPluginRoot = Join-Path $packageRoot 'plugins\editors-xtd\sourcesbutton'
+$fieldPluginRoot = Join-Path $packageRoot 'plugins\fields\sources'
 $buildRoot = Join-Path $repoRoot 'build'
 $stageRoot = Join-Path $buildRoot 'stage'
 $outputRoot = Join-Path $buildRoot 'output'
@@ -94,7 +95,8 @@ function Get-ManifestVersion {
 $requiredPaths = @(
     $packageRoot,
     $contentPluginRoot,
-    $editorPluginRoot
+    $editorPluginRoot,
+    $fieldPluginRoot
 )
 
 foreach ($requiredPath in $requiredPaths) {
@@ -123,6 +125,8 @@ $contentZip = Join-Path $pluginsStageRoot 'plg_content_sources.zip'
 $editorZip = Join-Path $pluginsStageRoot 'plg_editors_xtd_sourcesbutton.zip'
 New-ZipFromDirectoryContents -SourceDirectory $contentPluginRoot -DestinationZip $contentZip
 New-ZipFromDirectoryContents -SourceDirectory $editorPluginRoot -DestinationZip $editorZip
+$fieldZip = Join-Path $pluginsStageRoot 'plg_fields_sources.zip'
+New-ZipFromDirectoryContents -SourceDirectory $fieldPluginRoot -DestinationZip $fieldZip
 
 $packageStage = Join-Path $stageRoot 'package'
 New-Item -ItemType Directory -Path $packageStage | Out-Null
@@ -132,6 +136,7 @@ New-Item -ItemType Directory -Path $packageFilesStage | Out-Null
 Copy-Item -Path $packageManifestPath -Destination $packageStage -Force
 Copy-Item -Path $contentZip -Destination $packageFilesStage -Force
 Copy-Item -Path $editorZip -Destination $packageFilesStage -Force
+Copy-Item -Path $fieldZip -Destination $packageFilesStage -Force
 
 $packageLanguageSource = Join-Path $packageRoot 'language'
 if (Test-Path $packageLanguageSource) {

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="fields" method="upgrade">
+    <name>PLG_FIELDS_SOURCES</name>
+    <author>SuperSoft</author>
+    <version>4.0.0</version>
+    <description>PLG_FIELDS_SOURCES_XML_DESCRIPTION</description>
+    <namespace path="src">SuperSoft\Plugin\Fields\Sources</namespace>
+    <files>
+        <folder plugin="sources">services</folder>
+        <folder>src</folder>
+        <folder>tmpl</folder>
+    </files>
+    <languages folder="language">
+        <language tag="en-GB">en-GB/plg_fields_sources.ini</language>
+        <language tag="en-GB">en-GB/plg_fields_sources.sys.ini</language>
+        <language tag="el-GR">el-GR/plg_fields_sources.ini</language>
+        <language tag="el-GR">el-GR/plg_fields_sources.sys.ini</language>
+    </languages>
+</extension>

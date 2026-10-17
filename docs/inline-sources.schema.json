@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sources inline container version 2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "display", "blocks"],
+  "properties": {
+    "version": {"const": 2},
+    "display": {"enum": ["separate", "merged"]},
+    "ordering": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["blocks", "global"], "default": "blocks"},
+        "order": {"$ref": "#/$defs/order", "default": "published-desc"}
+      }
+    },
+    "presentation": {"$ref": "#/$defs/containerPresentation"},
+    "blocks": {"type": "array", "minItems": 1, "maxItems": 30, "items": {"$ref": "#/$defs/block"}}
+  },
+  "$defs": {
+    "title": {"type": "string", "maxLength": 2000, "description": "Runtime also limits to 2000 UTF-8 bytes."},
+    "ids": {"type": "array", "maxItems": 500, "items": {"oneOf": [{"type": "integer", "minimum": 1, "maximum": 2147483647}, {"$ref": "#/$defs/selectionEntry"}]}, "description": "Ordered IDs or SmartBrowser entries. Runtime requires the adapter/prefix to match articles, categories or tags according to the owning array."},
+    "selectionEntry": {
+      "type": "object", "additionalProperties": false, "required": ["selection"],
+      "properties": {
+        "selection": {
+          "type": "object", "additionalProperties": false, "required": ["adapter", "id"],
+          "properties": {"adapter": {"enum": ["articles", "categories", "tags"]}, "id": {"type": "string", "pattern": "^(article|category|tag):[1-9][0-9]*$"}}
+        },
+        "usage": {
+          "type": "object", "additionalProperties": false, "maxProperties": 100,
+          "description": "Runtime limits usage to 64 KiB, 20 nested levels and 8192 JSON nodes. Article names are only accepted for article references.",
+          "properties": {
+            "article.displayedName": {"type": ["string", "null"], "maxLength": 255},
+            "visual.presentation": {"enum": [null, "", "thumbnail", "icon", "both"]},
+            "visual.iconOverride": {"type": ["string", "null"], "maxLength": 160, "pattern": "^([a-zA-Z0-9_-]+( [a-zA-Z0-9_-]+)*)?$"},
+            "visual.thumbnailOverride": {
+              "type": ["object", "null"], "additionalProperties": false, "required": ["adapter", "id"],
+              "properties": {"adapter": {"const": "media"}, "id": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": ":"}}
+            }
+          },
+          "patternProperties": {"^ext\\.[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-zA-Z][a-zA-Z0-9_-]*)*$": {}}
+        }
+      }
+    },
+    "layout": {"enum": ["cards", "details", "list", "icons", "contents"]},
+    "order": {"enum": ["published-desc", "published-asc", "created-desc", "created-asc", "title-asc", "title-desc", "ordering-asc"]},
+    "limit": {"type": "integer", "minimum": 0, "maximum": 500, "default": 0},
+    "containerPresentation": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"title": {"$ref": "#/$defs/title"}, "layout": {"$ref": "#/$defs/layout"}, "limit": {"$ref": "#/$defs/limit"}}
+    },
+    "block": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": {
+        "type": {"enum": ["articles", "categories", "tags"]},
+        "name": {"$ref": "#/$defs/title", "deprecated": true, "description": "Legacy fallback for an empty title; no longer emitted."},
+        "title": {"$ref": "#/$defs/title", "description": "Label in Separate; administrative Name in Merged."},
+        "articles": {"$ref": "#/$defs/ids"},
+        "filters": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "tags": {"$ref": "#/$defs/ids"}, "categories": {"$ref": "#/$defs/ids"},
+            "order": {"$ref": "#/$defs/order"}, "limit": {"$ref": "#/$defs/limit"},
+            "groupByCategory": {"type": "boolean", "deprecated": true, "description": "Accepted for old tokens, ignored and no longer emitted."}
+          }
+        },
+        "presentation": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"layout": {"$ref": "#/$defs/layout"}}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "articles"}}},
+          "then": {"properties": {"filters": {"properties": {"tags": {"maxItems": 0}, "categories": {"maxItems": 0}}}}},
+          "else": {"properties": {"articles": {"maxItems": 0}}}
+        },
+        {
+          "if": {"properties": {"type": {"enum": ["articles", "tags"]}}},
+          "then": {"properties": {"filters": {"properties": {"groupByCategory": {"const": false}}}}}
+        }
+      ]
+    }
+  }
+}
