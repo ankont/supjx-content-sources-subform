@@ -4,11 +4,18 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const smart = resolve(repo, '../pkg_smartbrowser/package/component/media');
 const joomla = resolve(repo, '../../JoomlaTest/site');
 const sources = resolve(repo, 'package/plugins/editors-xtd/sourcesbutton/media');
 const artifacts = resolve(repo, 'tests/artifacts'); await mkdir(artifacts, { recursive: true });
+const toolbarLanguage = spawnSync('php', ['-r', 'echo json_encode(parse_ini_file($argv[1]));', resolve(repo, 'package/plugins/editors-xtd/sourcesbutton/language/el-GR/el-GR.plg_editors-xtd_sourcesbutton.ini')], { encoding:'utf8' });
+assert.equal(toolbarLanguage.status, 0, toolbarLanguage.stderr);
+const greek = JSON.parse(toolbarLanguage.stdout);
+const compactLabels = Object.fromEntries(['addShort_articles','addShort_categories','addShort_tags','pasteShort'].map(key => [key,greek['PLG_EDITORSXTD_SOURCESBUTTON_INLINE_'+key.toUpperCase()]]));
+const emailFixtures=spawnSync('php',['tests/php-email.php','--artifacts'],{cwd:repo,encoding:'utf8'});
+assert.equal(emailFixtures.status,0,emailFixtures.stdout+emailFixtures.stderr);
 const resources = ids => ids.map(id => ({ id, title: id === 'article:99' ? 'Unavailable reference' : 'Article ' + id.split(':')[1],
   kind: id.startsWith('article:') ? 'item' : 'node',
   type: id === 'article:99' ? 'unavailable' : id.startsWith('category:') ? 'category' : id.startsWith('tag:') ? 'tag' : 'article',
@@ -39,7 +46,7 @@ const server = createServer(async (req, res) => {
         'plg_editorsxtd_sourcesbutton.inline':{editorSizeUrl:'/smart/js/picker-size.js',contentCss:'/sources/css/sourcesbutton.css?v=current-fixture',fontAwesomeUrl:'/joomla/media/system/css/joomla-fontawesome.min.css',previewMode:'placeholder',badgeLabel:'Sources',csrfToken:'test-token',ajaxUrl:'/preview',
         taxonomyEditor:location.search.includes('compact=1')?'compact':'collection',
         filterFields:${JSON.stringify({ tags: '<joomla-field-fancy-select><select id="tags" name="tags[]" multiple><option value="8">Tag 8</option><option value="12">Tag 12</option><option value="5">Tag 5</option></select></joomla-field-fancy-select>', categories: '<joomla-field-fancy-select><select id="categories" name="categories[]" multiple><option value="14">Category 14</option><option value="19">Category 19</option></select></joomla-field-fancy-select>' })},
-        i18n:{builder:'Sources Builder',insert:'Insert',update:'Update',cancel:'Cancel',addBlock:'Add block',addSources:'Add / change sources',title:'Title',sources:'Sources',presentation:'Presentation',filters:'Filters / advanced',tags:'Tags',categories:'Categories',limit:'Limit',layout:'Layout',separate:'Separate',merged:'Merged',duplicate:'Duplicate',delete:'Delete',up:'Move up',down:'Move down',untitled:'Source block',edit:'Edit Sources',advancedTags:'Advanced tag selection',advancedCategories:'Advanced category selection'}}};
+        i18n:{...${JSON.stringify(compactLabels)},builder:'Sources Builder',insert:'Insert',update:'Update',cancel:'Cancel',addBlock:'Add block',addSources:'Add / change sources',title:'Title',sources:'Sources',presentation:'Presentation',filters:'Filters / advanced',tags:'Tags',categories:'Categories',limit:'Limit',layout:'Layout',separate:'Separate',merged:'Merged',duplicate:'Duplicate',delete:'Delete',up:'Move up',down:'Move down',untitled:'Source block',edit:'Edit Sources',advancedTags:'Advanced tag selection',advancedCategories:'Advanced category selection'}}};
       </script>
       <script src="/smart/js/dialog-dismiss.js"></script><script src="/smart/js/media-value.js"></script><script src="/smart/js/picker.js"></script>
       <script src="/joomla/media/vendor/choicesjs/js/choices.min.js"></script><script type="module" src="/joomla/media/system/js/fields/joomla-field-fancy-select.js"></script>
@@ -51,6 +58,11 @@ const server = createServer(async (req, res) => {
       import * as integration from '/sources/js/sourcesbutton.js';
       await import('/smart/js/collection.js');
       const ready=editor=>{
+        if (${legacy}) {
+          const view=editor.getDoc().defaultView, supports=view.CSS.supports.bind(view.CSS);
+          view.CSS.supports=(...args)=>args[0]==='field-sizing'?false:supports(...args);
+          const fallback=editor.getDoc().createElement('style');fallback.textContent='.sources-editor-token__json{field-sizing:fixed}';editor.getDoc().head.append(fallback);
+        }
         integration.bindEditor(editor); window.editor=editor;
         editor.getDoc().defaultView.frameElement.style.width='100%';
         class Decorator extends JoomlaEditorDecorator{getValue(){return editor.getContent()}setValue(v){editor.setContent(v)}getSelection(){return editor.selection.getContent({format:'text'})}replaceSelection(v){editor.insertContent(v)}};
@@ -86,13 +98,19 @@ const server = createServer(async (req, res) => {
     } else if (url.pathname === '/template-preview.css') {
       body=await readFile(resolve(repo,'../../Catichisi.gr/templates/site/jl_kidsacademy_free/custom/css-compiled/custom.css'));mime='text/css';
     } else if (url.pathname === '/preview') {
+      let raw='';for await(const chunk of req)raw+=chunk;
+      const post=new URLSearchParams(raw),presentation=post.get('presentation')||'site';
       const failure = url.searchParams.get('failure'); mime = 'application/json';
       if (failure === 'forbidden') { res.writeHead(403, {'Content-Type':mime});res.end('{}');return; }
       if (failure === 'json') body = '<html>Login required</html>';
       else if (failure === 'empty') body = JSON.stringify({success:true,data:[]});
       else if (failure === 'permission') body = JSON.stringify({success:false,message:'Sources preview not authorised.'});
       else if (failure) body = JSON.stringify({success:true,data:[{ok:false,html:'',code:failure}]});
-      else body = JSON.stringify({ success: true, data: [{ ok: true, html: '<div>Resolved preview</div>' }] });
+      else if(presentation==='email' && post.get('mode')==='render'){
+        const config=JSON.parse(post.get('configuration')),layout=config.display==='merged'?config.presentation.layout:config.blocks[0].presentation.layout;
+        const emailHtml=(await readFile(resolve(artifacts,'email-'+layout+'.html'),'utf8')).replace(/<img /g,'<img height="90" ');
+        body=JSON.stringify({success:true,data:[{ok:true,presentation,renderer:'EmailRenderer',html:emailHtml,styles:[]}]});
+      }else body = JSON.stringify({ success: true, data: [{ ok: true,presentation,renderer:'InlineRenderer', html: '<div>Resolved preview</div>' }] });
     } else {
       const root = url.pathname.startsWith('/sources/') ? sources : url.pathname.startsWith('/smart/') ? smart : url.pathname.startsWith('/joomla/') ? joomla : null;
       if (!root) throw new Error('Unknown path'); const relative = url.pathname.split('/').slice(2).join('/'); const file = resolve(root, relative);
@@ -108,6 +126,10 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 try {
   for (const administrator of [false,true]) for (const legacy of [false,true]) for (const width of [1280,390]) {
     const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(15000);const errors=[];
+    if(legacy) await page.addInitScript(()=>{
+      const supports=CSS.supports.bind(CSS);
+      CSS.supports=(...args)=>args[0]==='field-sizing'?false:supports(...args);
+    });
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(base+'/?'+new URLSearchParams({...legacy?{jce:'1',compact:'1'}:{},...administrator?{admin:'1'}:{}}));
     await page.waitForFunction(()=>window.ready);
@@ -121,10 +143,72 @@ try {
     const before=await page.evaluate(()=>editor.getContent());
     assert.equal(before.includes('data-sources-token'),false);
     const edit=async()=>page.evaluate(()=>editor.getDoc().querySelector('[data-sources-edit]').click());
+    await page.evaluate(label=>Joomla.getOptions('plg_editorsxtd_sourcesbutton.inline').i18n.addBlock=label,greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_ADDBLOCK);
+    await page.evaluate(labels=>Object.assign(Joomla.getOptions('plg_editorsxtd_sourcesbutton.inline').i18n,labels),{
+      expandAll:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_EXPANDALL,
+      collapseAll:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_COLLAPSEALL,
+    });
     await edit();
     const manual=page.locator('.sources-block[data-type=articles]').first();
     const category=page.locator('.sources-block[data-type=categories]').first();
-    assert.equal(await page.locator('.sources-add-actions>button').count(),3);
+    assert.equal(await page.locator('.sources-add-actions>button').count(),4);
+    assert.deepEqual(await page.locator('.sources-add-actions>button').allTextContents(),Object.values(compactLabels));
+    assert.equal(await page.locator('.sources-add-actions>button').evaluateAll(buttons=>buttons.some(button=>button.scrollWidth>button.clientWidth+1)),false);
+    assert.equal(await page.locator('.sources-add-heading').textContent(),greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_ADDBLOCK);
+    await page.locator('.sources-add-section').screenshot({path:resolve(artifacts,'compact-add-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+    await manual.locator('.sources-block-toolbar').screenshot({path:resolve(artifacts,'block-tools-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+    if (process.argv.includes('--validation-only')) {
+      await page.locator('.sources-builder-footer').getByRole('button',{name:'Cancel',exact:true}).click();
+      const verification=await page.evaluate(async()=>{
+        const {SourcesBuilder}=await import('/sources/js/builder.js');
+        const {newContainer,newBlock}=await import('/sources/js/inline.js');
+        const native=document.createElement('form'),hidden=document.createElement('div'),number=document.createElement('input');
+        hidden.hidden=true;number.type='number';number.required=true;number.min='0';number.max='500';
+        hidden.append(number);native.append(hidden);document.body.append(native);
+        let invalid=0,submitted=0;native.addEventListener('invalid',()=>invalid++,true);native.addEventListener('submit',e=>{e.preventDefault();submitted++});
+        native.requestSubmit();native.remove();
+        let cases=0;
+        for(const type of ['articles','categories','tags'])for(const mode of ['separate','merged'])for(const editing of [false,true]){
+          const config=newContainer();config.blocks=[newBlock(type)];config.display=mode;
+          const b=new SourcesBuilder(config,editing),done=b.open();
+          for(let i=0;b.pending && i<200;i++)await new Promise(resolve=>setTimeout(resolve,10));
+          const record=b.records.get(b.config.blocks[0]);
+          const container=b.containerSettings.querySelector('input[type=number]');
+          const applicable=mode==='merged'?container:record.limitField?.querySelector('input');
+          if(applicable){
+            applicable.value='';applicable.dispatchEvent(new Event('input',{bubbles:true}));b.setExpanded(record,false);b.confirm.click();
+            if(b.closed || b.alert.hidden || (mode==='separate' && record.content.hidden))throw new Error('Invalid collapsed limit was not revealed');
+            applicable.value='0';applicable.dispatchEvent(new Event('input',{bubbles:true}));
+          }
+          const inactive=mode==='separate'?container:record.limitField?.querySelector('input');
+          if(inactive)inactive.value='';
+          b.confirm.click();
+          if(!b.closed)throw new Error('Applicable valid limit or inactive hidden limit blocked confirmation');
+          const result=await done;if(result.display!==mode)throw new Error('Stored mode changed');cases++;
+        }
+        return {invalid,submitted,cases};
+      });
+      assert.deepEqual(verification,{invalid:1,submitted:0,cases:12});
+      console.log((administrator?'Atum':'Cassiopeia')+' '+(legacy?'JCE':'TinyMCE')+' '+width+': native hidden-control failure reproduced; 12 Insert/Update validation cases passed');
+      await page.close();continue;
+    }
+    if (process.argv.includes('--toolbar-only')) {
+      const control=page.locator('.sources-expand-all');
+      await control.click();
+      assert.equal(await page.locator('.sources-block-content:not([hidden])').count(),0);
+      assert.equal(await control.getAttribute('aria-expanded'),'false');
+      assert.equal(await control.textContent(),greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_EXPANDALL);
+      await control.click();
+      assert.equal(await page.locator('.sources-block-content[hidden]').count(),0);
+      assert.equal(await control.textContent(),greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_COLLAPSEALL);
+      assert.equal(await manual.locator('[data-block-action=duplicate] .fa-plus').count(),1);
+      assert.equal(await manual.locator('[data-block-action=duplicate]>span').count(),1);
+      await page.locator('.sources-display-bar').screenshot({path:resolve(artifacts,'display-bar-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+      assert.equal(await page.locator('.sources-builder-dialog').evaluate(d=>d.scrollWidth>d.clientWidth+1),false);
+      assert.equal(await page.evaluate(()=>editor.getContent()),before);
+      console.log((administrator?'Atum':'Cassiopeia')+' '+(legacy?'JCE':'TinyMCE')+' '+width+': toolbar and Expand/Collapse All passed (not save flow)');
+      await page.close();continue;
+    }
     const picker=page.frameLocator('.smartbrowser-picker iframe');
     await manual.locator('.sb-collection-count-toggle').click();
     await manual.getByText('Article 11',{exact:true}).first().waitFor();
@@ -191,7 +275,15 @@ try {
     await page.waitForFunction(legacy=>{
       const ids=inline.scan(editor.getContent())[0].config.blocks[1].filters.categories;
       return legacy ? ids.length===1 && ids[0]===19 : ids.length===2 && ids[0]===14 && ids[1]===19;
-    },legacy);
+    },legacy).catch(async error=>{
+      const state=await page.evaluate(()=>({
+        dialog:!!document.querySelector('.sources-builder-dialog'),
+        alert:document.querySelector('.sources-builder-alert')?.textContent,
+        invalid:[...document.querySelectorAll(':invalid')].map(n=>({tag:n.tagName,name:n.name,class:n.className,value:n.value,message:n.validationMessage,html:n.outerHTML.slice(0,500)})),
+        blocks:inline.scan(editor.getContent())[0]?.config?.blocks,
+      }));
+      throw new Error(error.message+' '+JSON.stringify(state));
+    });
     assert.deepEqual(await page.evaluate(()=>inline.scan(editor.getContent())[0].config.blocks[1].filters.tags),[5]);
     assert.equal(await page.evaluate(()=>inline.scan(editor.getContent())[0].config.blocks[1].title),'Category identity');
     assert.equal(await page.evaluate(()=>inline.scan(editor.getContent())[0].config.blocks[1].name),undefined);
@@ -336,10 +428,108 @@ try {
     });
     assert.equal(titleSizing.with.width,titleSizing.without.width,'A block title must not change the preview width through scrollbars');
     assert.equal(titleSizing.with.columns,titleSizing.without.columns,'Cards must retain the same column count with or without a block title');
-    assert.equal(titleSizing.with.gutter,'stable','Editor preview reserves width even before its scrollbar appears');
+    assert.equal(titleSizing.with.gutter,'auto','Inline preview does not reserve an internal scrollbar');
     assert.equal(titleSizing.without.scroll,false,'Cards without a heading fit below the scroll threshold');
-    assert.equal(titleSizing.with.scroll,true,'Adding the heading crosses the scroll threshold without changing columns');
+    assert.equal(titleSizing.with.scroll,false,'Adding a heading grows the preview without an internal scrollbar');
+    const nested = await page.evaluate(async () => {
+      const ui = await import('/sources/js/preview-ui.js');
+      const doc = editor.getDoc(), outer = doc.querySelector('.sources-editor-token--render');
+      const marker = doc.createElement('div'); marker.dataset.sourcesPreviewToken = outer.dataset.sourcesToken;
+      marker.innerHTML = '<ul><li>Nested source</li></ul>';
+      const embedded = doc.createElement('article'); embedded.className = 'preview-article';
+      embedded.innerHTML = '<p>Before nested Sources</p>'; embedded.append(marker);
+      const after = doc.createElement('p'); after.textContent = 'After nested Sources'; embedded.append(after);
+      outer.querySelector('.sources-editor-token__body').append(embedded);
+      const previous = localStorage.getItem('supjx.sources.editor.previewMode');
+      ui.mountNestedPreviews(doc);
+      let node = doc.querySelector('[data-sources-nested-preview]'); const initial = node.dataset.sourcesPreviewMode;
+      const position = node.previousElementSibling.textContent === 'Before nested Sources'
+        && node.nextElementSibling.textContent === 'After nested Sources' && node.parentElement === embedded;
+      node.querySelector('[data-sources-mode="none"]').click(); node = doc.querySelector('[data-sources-nested-preview]');
+      const text = node.querySelector('textarea'); text.focus(); text.select();
+      const selectable = text.readOnly && text.selectionEnd === text.value.length;
+      node.querySelector('[data-sources-mode="placeholder"]').click(); node = doc.querySelector('[data-sources-nested-preview]');
+      const style = doc.defaultView.getComputedStyle(node), label = doc.defaultView.getComputedStyle(node.querySelector('.sources-editor-token__label'));
+      const result = {initial, position, selectable, display:style.display, align:label.textAlign,
+        preferenceUnchanged:previous===localStorage.getItem('supjx.sources.editor.previewMode'), edit:!!node.querySelector('[data-sources-edit]')};
+      node.querySelector('[data-sources-mode="render"]').click();
+      return result;
+    });
+    assert.deepEqual(nested,{initial:'list_manual',position:true,selectable:true,display:'block',align:'center',preferenceUnchanged:true,edit:false});
+    await frame.locator('[data-sources-nested-preview] .sources-editor-token__body').getByText('Resolved preview',{exact:true}).waitFor();
+    await frame.locator('[data-sources-nested-preview] [data-sources-mode=none]').click();
+    const jsonField = frame.locator('[data-sources-nested-preview] textarea');
+    await jsonField.click(); await jsonField.press('Control+a');
+    assert.equal(await jsonField.evaluate(node=>node.selectionEnd-node.selectionStart), (await jsonField.inputValue()).length, 'Native click and Ctrl+A select JSON in TinyMCE/JCE: '+JSON.stringify(await jsonField.evaluate(node=>({active:node.ownerDocument.activeElement?.outerHTML,start:node.selectionStart,end:node.selectionEnd,editable:node.contentEditable}))));
+    const jsonBefore = await jsonField.inputValue(); await jsonField.press('x');
+    assert.equal(await jsonField.inputValue(),jsonBefore,'JSON stays read-only');
+    const jsonSize = await jsonField.evaluate(node => {
+      const style = node.ownerDocument.defaultView.getComputedStyle(node), rect = node.getBoundingClientRect();
+      const mirror = node.ownerDocument.createElement('div'); mirror.textContent = node.value;
+      Object.assign(mirror.style, { position:'absolute',visibility:'hidden',boxSizing:'border-box',width:rect.width+'px',
+        font:style.font,lineHeight:style.lineHeight,letterSpacing:style.letterSpacing,whiteSpace:'pre-wrap',overflowWrap:'break-word',padding:style.padding,border:style.border });
+      node.ownerDocument.body.append(mirror); const contentHeight = mirror.getBoundingClientRect().height; mirror.remove();
+      return {height:rect.height,contentHeight,resize:style.resize,inlineHeight:node.style.height,fieldSizing:style.fieldSizing,scrollHeight:node.scrollHeight,overflow:node.scrollHeight>node.clientHeight+1};
+    });
+    assert.equal(jsonSize.resize,'none'); assert.equal(jsonSize.overflow,false,JSON.stringify(jsonSize));
+    assert.ok(Math.abs(jsonSize.height-jsonSize.contentHeight)<=19,'JSON height must match its actual wrapped text: '+JSON.stringify(jsonSize));
+    const resized = await jsonField.evaluate(async node => {
+      const view=node.ownerDocument.defaultView, iframe=view.frameElement, previous=iframe.style.width;
+      const settle=()=>new Promise(resolve=>view.requestAnimationFrame(()=>view.requestAnimationFrame(()=>view.requestAnimationFrame(resolve))));
+      const before=node.getBoundingClientRect().height; iframe.style.width='280px'; await settle();
+      const narrow=node.getBoundingClientRect().height;
+      iframe.style.width=previous; await settle();
+      return {before,narrow,restored:node.getBoundingClientRect().height,overflow:node.scrollHeight>node.clientHeight+1};
+    });
+    assert.equal(resized.overflow,false); assert.ok(Math.abs(resized.before-resized.restored)<2,'JSON shrinks back after widening');
+    if(width===1280) assert.ok(resized.narrow>resized.before,'JSON grows for narrow viewports');
+    await jsonField.screenshot({path:resolve(artifacts,'json-preview-'+(administrator?'admin':'site')+'-'+(legacy?'fallback-jce':'native-tiny')+'-'+width+'.png')});
+    await frame.locator('[data-sources-nested-preview][data-sources-preview-mode=none]').screenshot({path:resolve(artifacts,'json-frame-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+    const frameStyles = await page.evaluate(()=>{
+      const doc=editor.getDoc(), node=doc.querySelector('[data-sources-nested-preview]');
+      const measure=target=>{const style=doc.defaultView.getComputedStyle(target);return {background:style.backgroundColor,border:style.borderColor,
+        padding:style.padding,margin:style.margin,boxSizing:style.boxSizing,width:target.getBoundingClientRect().width};};
+      const json=measure(node); node.querySelector('[data-sources-mode=placeholder]').click();
+      return {json,placeholder:measure(doc.querySelector('[data-sources-nested-preview]'))};
+    });
+    assert.deepEqual(frameStyles.json,frameStyles.placeholder,'JSON and placeholder use the same blue frame, spacing and outer width');
     assert.equal(await page.evaluate(()=>editor.getContent()),savedBeforePreviewSizing,'Preview headings never change saved tokens');
+    await page.evaluate(legacy=>new Promise(resolve=>{
+      const textarea=document.createElement('textarea');textarea.id='email-instance';document.body.append(textarea);
+      integration.setEditorPresentation('email-instance','email');
+      const ready=ed=>{window.emailEditor=ed;integration.bindEditor(ed);resolve();};
+      const common={height:400,setup:ed=>{integration.bindEditor(ed);if(legacy)ed.onInit.add(()=>ready(ed));else ed.on('init',()=>ready(ed));}};
+      if(legacy)tinymce.init({...common,mode:'exact',elements:'email-instance',theme:'core',compress:{css:false},plugins:'noneditable',theme_advanced_buttons1:'bold,italic',theme_advanced_buttons2:'',theme_advanced_buttons3:''});
+      else tinymce.init({...common,selector:'#email-instance',license_key:'gpl',plugins:'code',toolbar:'code'});
+    }),legacy);
+    const emailSignatures=[];
+    for(const layout of ['cards','details','list','icons','contents']){
+      await page.evaluate(layout=>{
+        const c=inline.newContainer();c.blocks[0].articles=[1];c.blocks[0].presentation.layout=layout;
+        emailEditor.setContent(inline.serialize(c));integration.decorateDocument(emailEditor.getDoc());
+        emailEditor.getDoc().querySelector('[data-sources-mode=render]').click();
+      },layout);
+      await page.waitForFunction(()=>emailEditor.getDoc().querySelector('iframe.sources-email-preview')?.contentDocument?.querySelector('img[width]'));
+      const actual=await page.evaluate(()=>{
+        const node=emailEditor.getDoc().querySelector('.sources-editor-token'),frame=node.querySelector('iframe'),doc=frame.contentDocument;
+        return {presentation:node.dataset.sourcesPresentation,width:doc.querySelector('img').getAttribute('width'),height:doc.querySelector('img').getAttribute('height'),tableRole:doc.querySelector('table').getAttribute('role'),
+          tableStyle:doc.querySelector('table').getAttribute('style'),imageStyle:doc.querySelector('img').getAttribute('style'),links:doc.querySelectorAll('link[rel=stylesheet]').length,
+          saved:emailEditor.getContent(),sitePresentation:editor.getDoc().querySelector('.sources-editor-token').dataset.sourcesPresentation};
+      });
+      assert.equal(actual.presentation,'email');assert.equal(actual.sitePresentation,'site');assert.equal(actual.tableRole,'presentation');
+      assert.equal(actual.width,({cards:'264',details:'146',list:'50',icons:'120',contents:'560'})[layout]);
+      assert.equal(actual.height,'90','Explicit server image heights survive the WYSIWYG preview surface');
+      assert.ok(actual.tableStyle.includes('border-collapse'));assert.ok(actual.imageStyle.includes('display:block'));assert.equal(actual.links,0);
+      assert.ok(!actual.saved.includes('<table')&&!actual.saved.includes('<iframe'));
+      emailSignatures.push(actual.width);
+      const emailFrameElement=await page.evaluateHandle(()=>emailEditor.getDoc().querySelector('iframe.sources-email-preview'));
+      await emailFrameElement.asElement().screenshot({path:resolve(artifacts,'email-editor-'+layout+'-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+      await emailFrameElement.dispose();
+    }
+    assert.equal(new Set(emailSignatures).size,5,'Email layout selection must remain distinct after insertion into each editor');
+    await page.evaluate(()=>integration.setEditorPresentation('email-instance','site'));
+    await page.waitForFunction(()=>emailEditor.getDoc().querySelector('.sources-editor-token__body')?.textContent==='Resolved preview');
+    assert.equal(await page.evaluate(()=>emailEditor.getDoc().querySelectorAll('iframe.sources-email-preview').length),0,'Context switch disposes the isolated email surface');
     assert.deepEqual(errors,[]);
     console.log((administrator?'Atum':'Cassiopeia')+' '+(legacy?'JCE/compact':'TinyMCE/collection')+' '+width+': typed blocks, selection, sorting, dropdowns, save/reopen passed');
     await page.close();

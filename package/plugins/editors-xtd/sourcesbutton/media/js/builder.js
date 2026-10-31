@@ -1,11 +1,24 @@
-import { newContainer, newBlock, validate, serialize, LAYOUTS, TYPES, ORDERS } from './inline.js';
+import { newContainer, newBlock, validate, serialize, MAX_BYTES, LAYOUTS, TYPES, ORDERS } from './inline.js';
 import { referenceItems as references, selectionValues, selectionIds as storedIds, valueId, usageProfile } from './usage.js';
 
 const options = () => window.Joomla?.getOptions('plg_editorsxtd_sourcesbutton.inline', {}) || {};
 const t = key => options().i18n?.[key] || key;
 const prefix = key => ({ articles: 'article', categories: 'category', tags: 'tag' })[key];
 const layoutIcons = { cards: 'th-large', details: 'list-alt', list: 'list-ul', icons: 'icons', contents: 'align-left' };
+const blockIcons = { articles: 'file-alt', categories: 'folder-open', tags: 'tags' };
 let fieldSequence = 0;
+const expansionPreferenceKey = 'supjx.sources.builder.expanded';
+const pageExpansionPreferences = new WeakMap();
+function preferredExpansion() {
+  if (pageExpansionPreferences.has(window)) return pageExpansionPreferences.get(window);
+  try { return window.localStorage.getItem(expansionPreferenceKey) !== 'collapsed'; }
+  catch { return pageExpansionPreferences.get(window) ?? true; }
+}
+function rememberExpansion(expanded) {
+  pageExpansionPreferences.set(window, expanded);
+  try { window.localStorage.setItem(expansionPreferenceKey, expanded ? 'expanded' : 'collapsed'); }
+  catch { /* Browser preferences are optional; the current page still remembers. */ }
+}
 function el(tag, className = '', text = '') {
   const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
 }
@@ -19,10 +32,13 @@ export class SourcesBuilder {
   constructor(config = null, editing = false, embedding = null) {
     this.config = validate(structuredClone(config || newContainer()));
     this.embedding = embedding;
+    this.initialExpansion = preferredExpansion(); this.initializingBlocks = true;
     this.editing = editing; this.records = new Map(); this.closed = false; this.pending = 0;
     this.dialog = el(embedding ? 'div' : 'dialog', 'smartbrowser-editor sources-builder-dialog' + (embedding ? ' sources-builder-embedded' : ''));
     this.form = el(embedding ? 'div' : 'form', 'sources-builder');
-    this.form.noValidate = false;
+    // This inner form validates owned controls explicitly before schema validation.
+    // Embedded builders never change their enclosing Joomla form's validation.
+    if (!embedding) this.form.noValidate = true;
     const header = el('header', 'sources-builder-heading');
     const heading = el('h2', '', t('builder')); heading.id = 'sources-builder-title-' + ++fieldSequence;
     this.dialog.setAttribute('aria-labelledby', heading.id);
@@ -39,6 +55,15 @@ export class SourcesBuilder {
       });
       choice.append(document.createTextNode(t(mode))); choice.dataset.mode = mode; display.append(choice); return choice;
     });
+    const displayBar = el('div', 'sources-display-bar');
+    this.expandAll = button(t('collapseAll'), 'angle-double-up', () => {
+      const expand = ![...this.records.values()].some(record => !record.content.hidden);
+      rememberExpansion(expand);
+      for (const record of this.records.values()) this.setExpanded(record, expand);
+      this.refreshExpansion();
+    }); this.expandAll.classList.add('sources-expand-all');
+    this.expandAllLabel = el('span', 'sources-expand-label', t('collapseAll')); this.expandAll.append(this.expandAllLabel);
+    displayBar.append(display, this.expandAll);
     this.containerSettings = el('div', 'sources-settings sources-container-settings');
     this.containerSettings.append(this.field(t('title'), this.config.presentation, 'title'), ...this.presentation(this.config.presentation));
     this.mergeOrdering = el('div', 'sources-settings sources-merge-ordering');
@@ -46,16 +71,25 @@ export class SourcesBuilder {
     this.orderingHint = el('p', 'sources-ordering-hint', t('blockOrderingHint'));
     this.mergeOrdering.insertBefore(this.orderingHint, this.mergeOrdering.lastElementChild);
     this.list = el('div', 'sources-blocks');
+    this.list.id = 'sources-block-list-' + ++fieldSequence;
+    this.expandAll.setAttribute('aria-controls', this.list.id);
     this.add = el('div', 'sources-add-actions');
     this.addButtons = TYPES.map(type => {
-      const command = button(t('add_' + type), 'plus', () => {
+      const command = button(t('add_' + type), blockIcons[type], () => {
       if (this.config.blocks.length >= 30) return;
       const block = newBlock(type); this.config.blocks.push(block); this.renderBlocks();
       this.records.get(block)?.titleInput.focus();
       });
-      command.classList.add('sources-add'); command.append(document.createTextNode(t('add_' + type))); this.add.append(command); return command;
+      command.classList.add('sources-add'); command.append(document.createTextNode(t('addShort_' + type))); this.add.append(command); return command;
     });
-    body.append(this.alert, display, this.containerSettings, this.mergeOrdering, this.list, this.add);
+    this.pasteButton = button(t('pasteBlock'), 'paste', () => this.clipboardBlock(null, true));
+    this.pasteButton.classList.add('sources-add'); this.pasteButton.dataset.blockAction = 'paste';
+    this.pasteButton.append(document.createTextNode(t('pasteShort'))); this.add.append(this.pasteButton);
+    const addSection = el('section', 'sources-add-section');
+    const addHeading = el('h3', 'sources-add-heading', t('addBlock')); addHeading.id = 'sources-add-title-' + ++fieldSequence;
+    this.add.setAttribute('role', 'group'); this.add.setAttribute('aria-labelledby', addHeading.id);
+    addSection.append(addHeading, this.add);
+    body.append(this.alert, displayBar, this.containerSettings, this.mergeOrdering, this.list, addSection);
     const footer = el('footer', 'sources-builder-footer');
     const cancel = button(t('cancel'), 'times', () => this.finish(null)); cancel.className = 'btn btn-danger'; cancel.append(document.createTextNode(t('cancel')));
     cancel.firstElementChild.className = 'icon-times';
@@ -67,9 +101,13 @@ export class SourcesBuilder {
     this.dialog.addEventListener('cancel', event => { event.preventDefault(); if (!this.pending) this.finish(null); });
     this.dialog.addEventListener('close', () => this.finish(null));
     this.form.addEventListener('submit', event => {
-      event.preventDefault(); if (this.pending) return;
+      event.preventDefault(); event.stopPropagation(); if (this.pending || !this.validateInputs()) return;
       try { serialize(this.config); this.finish(validate(this.config)); } catch (error) { this.error(error); }
     });
+    this.dialog.addEventListener('invalid', event => {
+      if (!event.target.matches('[data-sources-input]')) return;
+      event.preventDefault(); queueMicrotask(() => this.validateInputs());
+    }, true);
     this.refreshDisplay();
   }
 
@@ -124,11 +162,30 @@ export class SourcesBuilder {
 
   field(label, object, key, numeric = false) {
     const wrap = el('label', 'sources-field'); wrap.append(el('span', '', label));
-    const input = el('input'); input.type = numeric ? 'number' : 'text'; input.value = object[key];
+    const input = el('input'); input.type = numeric ? 'number' : 'text'; input.value = object[key] ?? (numeric ? 0 : '');
+    input.dataset.sourcesInput = numeric ? 'limit' : 'text';
     if (numeric) { input.min = '0'; input.max = '500'; input.step = '1'; input.required = true; }
     else input.maxLength = 500;
-    input.addEventListener('input', () => { object[key] = numeric ? Number(input.value) : input.value; this.refreshHeaders(); });
+    input.addEventListener('input', () => {
+      input.removeAttribute('aria-invalid');
+      if (!numeric || input.validity.valid) object[key] = numeric ? Number(input.value) : input.value;
+      this.refreshHeaders();
+    });
     wrap.append(input); return wrap;
+  }
+
+  validateInputs() {
+    const input = [...this.dialog.querySelectorAll('[data-sources-input]')].find(field => !field.disabled && !field.validity.valid);
+    if (!input) { if (this.validationError) this.alert.hidden=true; this.validationError=false; return true; }
+    const record = [...this.records.values()].find(record => record.card.contains(input));
+    if (record) this.setExpanded(record, true);
+    for (let parent=input.parentElement; parent && parent!==this.dialog; parent=parent.parentElement) {
+      if (parent.tagName==='DETAILS') parent.open=true;
+    }
+    this.refreshExpansion(); input.setAttribute('aria-invalid','true');
+    this.alert.textContent = t(input.dataset.sourcesInput==='limit' ? 'validationLimit' : 'validationField');
+    this.validationError=true; this.alert.hidden=false; input.focus();
+    return false;
   }
 
   selectField(label, object, key, values) {
@@ -180,6 +237,7 @@ export class SourcesBuilder {
   refreshDisplay() {
     this.modes.forEach(choice => choice.setAttribute('aria-pressed', String(choice.dataset.mode === this.config.display)));
     this.containerSettings.hidden = this.config.display !== 'merged';
+    this.containerSettings.querySelectorAll('[data-sources-input]').forEach(input => input.disabled = this.config.display !== 'merged');
     this.mergeOrdering.hidden = this.config.display !== 'merged';
     this.mergeOrdering.querySelectorAll('select')[1].disabled = !this.commonOrder();
     this.mergeOrdering.lastElementChild.hidden = !this.commonOrder();
@@ -190,7 +248,10 @@ export class SourcesBuilder {
       if (this.config.display === 'merged') record.display.querySelector('details').open = false;
       record.display.hidden = this.config.display === 'merged';
       record.captionField.firstElementChild.textContent = t(this.config.display === 'merged' ? 'name' : 'caption');
-      if (record.limitField) record.limitField.hidden = this.config.display === 'merged';
+      if (record.limitField) {
+        record.limitField.hidden = this.config.display === 'merged';
+        record.limitField.querySelector('input').disabled = this.config.display === 'merged';
+      }
       record.settings.classList.toggle('sources-settings-merged', this.config.display === 'merged');
       record.orderField?.querySelector('select').toggleAttribute('disabled', this.commonOrder());
       if (record.orderField) record.orderField.hidden = this.commonOrder();
@@ -212,7 +273,26 @@ export class SourcesBuilder {
       for (const key of Object.keys(record.filterFields)) this.setFilterSelection(block, key, record);
     });
     this.addButtons.forEach(command => command.disabled = this.config.blocks.length >= 30); this.refreshDisplay(); this.refreshHeaders();
+    this.pasteButton.disabled = this.config.blocks.length >= 30 || !!this.pending;
     this.confirm.disabled = !this.config.blocks.length || !!this.pending;
+    this.initializingBlocks = false;
+    this.refreshExpansion();
+  }
+
+  setExpanded(record, expanded) {
+    record.content.hidden = !expanded;
+    record.toggle.setAttribute('aria-expanded', String(expanded));
+    record.toggle.firstElementChild.className = 'fas fa-' + (expanded ? 'chevron-down' : 'chevron-right');
+  }
+
+  refreshExpansion() {
+    const expanded = [...this.records.values()].some(record => !record.content.hidden);
+    const label = t(expanded ? 'collapseAll' : 'expandAll');
+    this.expandAll.title = label; this.expandAll.setAttribute('aria-label', label);
+    this.expandAllLabel.textContent = label;
+    this.expandAll.setAttribute('aria-expanded', String(expanded));
+    this.expandAll.firstElementChild.className = 'fas fa-' + (expanded ? 'angle-double-up' : 'angle-double-down');
+    this.expandAll.disabled = !this.records.size;
   }
 
   refreshHeaders() {
@@ -224,6 +304,7 @@ export class SourcesBuilder {
         t(block.type), this.items(block, block.type).length + ' ' + t('selected')].join(' · ');
       record.up.disabled = index === 0; record.down.disabled = index === this.config.blocks.length - 1;
       record.remove.disabled = false;
+      record.duplicate.disabled = this.config.blocks.length >= 30;
     });
     this.notifyChange();
   }
@@ -234,30 +315,61 @@ export class SourcesBuilder {
     [this.config.blocks[index], this.config.blocks[next]] = [this.config.blocks[next], this.config.blocks[index]]; this.renderBlocks();
   }
 
+  async clipboardBlock(block, paste = false) {
+    if (this.pending || this.closed) return;
+    if (paste && this.config.blocks.length >= 30) return;
+    this.pending++; this.confirm.disabled = true; this.notifyChange();
+    this.pasteButton.disabled = true;
+    try {
+      const clipboard = window.navigator.clipboard;
+      if (!clipboard?.[paste ? 'readText' : 'writeText']) throw new Error(t('clipboardUnavailable'));
+      if (paste) {
+        const text = await clipboard.readText();
+        if (this.closed) return;
+        if (new TextEncoder().encode(text).length > MAX_BYTES) throw new Error(t('clipboardInvalid'));
+        let copied;
+        try { copied = validate({ ...newContainer(), blocks: [JSON.parse(text)] }).blocks[0]; }
+        catch { throw new Error(t('clipboardInvalid')); }
+        const blocks = [...this.config.blocks, copied];
+        serialize({ ...this.config, blocks });
+        this.config.blocks.push(copied); this.renderBlocks();
+        this.records.get(copied)?.titleInput.focus();
+      } else {
+        const container = validate({ ...newContainer(), blocks: [structuredClone(block)] });
+        serialize(container);
+        await clipboard.writeText(JSON.stringify(container.blocks[0], null, 2));
+      }
+      this.alert.hidden = true;
+    } catch (error) {
+      this.error(error?.name === 'NotAllowedError' ? new Error(t('clipboardUnavailable')) : error);
+    } finally {
+      this.pending = Math.max(0, this.pending - 1); this.confirm.disabled = !this.config.blocks.length || !!this.pending;
+      this.pasteButton.disabled = this.config.blocks.length >= 30 || !!this.pending; this.notifyChange();
+    }
+  }
+
   createBlock(block) {
     const card = el('section', 'sources-block');
     card.dataset.type = block.type;
     const heading = el('header', 'sources-block-heading');
     const title = el('strong'), summary = el('span', 'sources-block-summary');
     const toggle = button(t('untitled'), 'chevron-down', () => {
-      content.hidden = !content.hidden; toggle.setAttribute('aria-expanded', String(!content.hidden));
-      toggle.firstElementChild.className = 'fas fa-' + (content.hidden ? 'chevron-right' : 'chevron-down');
+      this.setExpanded(this.records.get(block), content.hidden); this.refreshExpansion();
     });
     toggle.classList.add('sources-block-toggle'); toggle.setAttribute('aria-expanded', 'true');
     const identity = el('span', 'sources-block-identity'); identity.append(title, summary); toggle.append(identity);
     const up = button(t('up'), 'arrow-up', () => this.move(block, -1));
     const down = button(t('down'), 'arrow-down', () => this.move(block, 1));
-    const menu = el('details', 'sources-block-menu'), menuToggle = el('summary');
-    menuToggle.title = t('actions'); menuToggle.setAttribute('aria-label', t('actions')); menuToggle.append(el('span', 'fas fa-ellipsis-v'));
-    const commands = el('div', 'sources-block-actions');
-    const duplicate = button(t('duplicate'), 'clone', () => {
+    const duplicate = button(t('duplicate'), 'plus', () => {
       if (this.config.blocks.length >= 30) return;
-      const index = this.config.blocks.indexOf(block); this.config.blocks.splice(index + 1, 0, structuredClone(block)); menu.open = false; this.renderBlocks();
-    }); duplicate.append(document.createTextNode(t('duplicate')));
+      const index = this.config.blocks.indexOf(block); this.config.blocks.splice(index + 1, 0, structuredClone(block)); this.renderBlocks();
+    }); duplicate.dataset.blockAction = 'duplicate';
+    const copy = button(t('copyBlock'), 'copy', () => this.clipboardBlock(block)); copy.dataset.blockAction = 'copy';
     const remove = button(t('delete'), 'trash', () => {
       this.config.blocks.splice(this.config.blocks.indexOf(block), 1); this.renderBlocks();
-    }); remove.classList.add('sources-block-delete'); commands.append(duplicate); menu.append(menuToggle, commands);
-    heading.append(toggle, up, down, remove, menu);
+    }); remove.classList.add('sources-block-delete');
+    const commands = el('div', 'sources-block-toolbar'); commands.append(up, down, duplicate, copy, remove);
+    heading.append(toggle, commands);
     const content = el('div', 'sources-block-content');
     const captionField = this.field(t('caption'), block, 'title');
     const display = this.presentation(block.presentation)[0];
@@ -276,7 +388,7 @@ export class SourcesBuilder {
       filterSummary.setAttribute('aria-expanded', String(advanced.open));
     });
     const filters = el('div', 'sources-filter-actions');
-    const record = { block, card, title, summary, toggle, content, up, down, remove, collectionHost, display, captionField, limitField, settings, filters, advanced,
+    const record = { block, card, title, summary, toggle, content, up, down, duplicate, remove, collectionHost, display, captionField, limitField, settings, filters, advanced,
       filterFields: {}, titleInput: captionField.querySelector('input') };
     if (block.type !== 'articles') {
       const other = block.type === 'categories' ? 'tags' : 'categories';
@@ -292,6 +404,7 @@ export class SourcesBuilder {
     content.append(settings, el('h3', 'sources-section-label', t(block.type)), collectionHost, advanced);
     card.append(heading, content);
     this.records.set(block, record); this.list.append(card);
+    if (this.initializingBlocks) this.setExpanded(record, this.initialExpansion);
     this.mountSelection(block, record);
   }
 

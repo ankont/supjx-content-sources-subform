@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { startPreviewRequest, appendPreviewStyles } from '../package/plugins/editors-xtd/sourcesbutton/media/js/preview-request.js';
+import { startPreviewRequest, appendPreviewStyles, previewRequestKey } from '../package/plugins/editors-xtd/sourcesbutton/media/js/preview-request.js';
 
 test('resource/Usage and mode updates invalidate old preview responses; server markers survive publication', async () => {
   const dom = new JSDOM('<body><div id="preview"></div></body>');
   const node = dom.window.document.querySelector('#preview');
   node.dataset.sourcesToken = 'resource-one'; node.dataset.sourcesPreviewMode = 'render';
-  const begin = () => startPreviewRequest(node, JSON.stringify([node.dataset.sourcesToken, node.dataset.sourcesPreviewMode]));
+  const begin = () => startPreviewRequest(node, previewRequestKey(node));
   const first = begin(); assert.equal(first.current(), true);
   assert.equal(begin(), null, 'same configuration is not fetched twice');
   node.dataset.sourcesToken = 'resource-one-with-new-usage';

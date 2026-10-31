@@ -8,7 +8,18 @@ use Joomla\Component\Fields\Administrator\Helper\FieldsHelper;
 /** Temporary, read-only bridge to the original template rendering contract. */
 final class LegacySources
 {
+    private static array $active = [];
+
     public static function prepare(string $context, object $article, $params): void
+    {
+        $key = (int) ($article->id ?? 0);
+        if (isset(self::$active[$key]) || count(self::$active) >= 3) { return; }
+        self::$active[$key] = true;
+        try { self::prepareLegacy($context, $article, $params); }
+        finally { unset(self::$active[$key]); }
+    }
+
+    private static function prepareLegacy(string $context, object $article, $params): void
     {
         if (!(bool) $params->get('legacy_enabled', 1)) { return; }
         // Even malformed/future inline configurations must never be rewritten as legacy tokens.
@@ -24,8 +35,18 @@ final class LegacySources
             return;
         }
         if (empty($article->id)) { return; }
+        if (!preg_match($pattern, $article->text) && !(bool) $params->get('append_if_missing', 1)) { return; }
 
-        $fields = FieldsHelper::getFields('com_content.article', $article, true);
+        $app = Factory::getApplication();
+        $base = trim((string) $params->get('templates_base_path', ''));
+        if ($base === '') { $base = JPATH_SITE . '/templates/' . $app->getTemplate() . '/html/com_content/article'; }
+        $entry = trim((string) $params->get('templates_entry_file', 'sources.php')) ?: 'sources.php';
+        $path = rtrim($base, '/\\') . '/' . ltrim($entry, '/\\');
+        if (!is_file($path) || !is_readable($path)) { return; }
+        $fields = RequestCache::remember(RequestCache::key('legacy-fields', [
+            $article->id, $article->catid ?? null, $article->fieldscatid ?? null,
+            $article->assigned_cat_ids ?? null, $article->language ?? null,
+        ]), static fn() => FieldsHelper::getFields('com_content.article', $article, false));
         $fieldName = trim((string) $params->get('subform_field_name', 'blocks')) ?: 'blocks';
         $sourcesField = null;
         foreach ($fields as $field) {
@@ -33,16 +54,15 @@ final class LegacySources
             if (($field->type ?? '') === 'sources' && self::hasValue($field->rawvalue ?? '')) { return; }
             if (($field->name ?? '') === $fieldName) { $sourcesField = $field; }
         }
+        if ($sourcesField === null || (!self::hasValue($sourcesField->rawvalue ?? '') && empty($sourcesField->subform_rows))) { return; }
+        // Only genuine legacy rendering needs full subform preparation. Other fields/plugins retain their lifecycle.
+        $fields = SourceFieldData::withoutRendering(static fn() => FieldsHelper::getFields('com_content.article', $article, true));
+        $sourcesField = null;
+        foreach ($fields as $field) { if (($field->name ?? '') === $fieldName) { $sourcesField = $field; break; } }
         $rows = $sourcesField->subform_rows ?? [];
         if (!is_array($rows) || !$rows) { return; }
         $sourcesArticle = clone $article;
         $sourcesArticle->jcfields = $fields;
-        $app = Factory::getApplication();
-        $base = trim((string) $params->get('templates_base_path', ''));
-        if ($base === '') { $base = JPATH_SITE . '/templates/' . $app->getTemplate() . '/html/com_content/article'; }
-        $entry = trim((string) $params->get('templates_entry_file', 'sources.php')) ?: 'sources.php';
-        $path = rtrim($base, '/\\') . '/' . ltrim($entry, '/\\');
-        if (!is_file($path) || !is_readable($path)) { return; }
 
         $render = static function (array $indices, string $mode) use ($sourcesArticle, $sourcesField, $rows, $params, $path): string {
             $sourcesRows = $rows;

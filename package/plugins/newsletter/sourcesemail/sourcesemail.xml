@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="newsletter" method="upgrade">
+    <name>PLG_NEWSLETTER_SOURCESEMAIL</name>
+    <author>SuperSoft — Kontarinis Andreas</author>
+    <creationDate>2026-10-30</creationDate>
+    <version>1.1.1</version>
+    <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
+    <description>PLG_NEWSLETTER_SOURCESEMAIL_DESCRIPTION</description>
+    <namespace path="src">SuperSoft\Plugin\Newsletter\SourcesEmail</namespace>
+    <files><folder plugin="sourcesemail">services</folder><folder>src</folder><folder>layouts</folder><folder>language</folder></files>
+    <languages folder="language">
+        <language tag="en-GB">en-GB/plg_newsletter_sourcesemail.ini</language>
+        <language tag="en-GB">en-GB/plg_newsletter_sourcesemail.sys.ini</language>
+        <language tag="el-GR">el-GR/plg_newsletter_sourcesemail.ini</language>
+        <language tag="el-GR">el-GR/plg_newsletter_sourcesemail.sys.ini</language>
+    </languages>
+</extension>

@@ -29,9 +29,13 @@
 .sources-builder-body{flex:1;overflow:auto;padding:20px 22px;min-height:0;overscroll-behavior:contain}
 .sources-command{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:34px;border:1px solid #cdd6de;border-radius:5px;background:#fff;color:#344959;font:inherit;padding:6px 10px;cursor:pointer;text-decoration:none}
 .sources-command:hover{background:#eff3f6}
-.sources-command:focus-visible,.sources-block-menu summary:focus-visible{outline:2px solid #077b86;outline-offset:2px}
+.sources-command:focus-visible{outline:2px solid #077b86;outline-offset:2px}
 .sources-command:disabled{opacity:.4;cursor:default}
 .sources-display{display:flex;gap:0;margin-bottom:18px}
+.sources-display-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}
+.sources-display-bar>.sources-display{margin-bottom:0;min-width:0}
+.sources-expand-all{min-height:36px;max-width:100%;padding:6px 10px;flex-shrink:0;margin-left:auto}
+.sources-expand-all>.fas{flex-shrink:0}
 .sources-display .sources-command{border-radius:0;min-width:130px}
 .sources-display .sources-command:first-child{border-radius:5px 0 0 5px}
 .sources-display .sources-command:last-child{border-radius:0 5px 5px 0}
@@ -48,11 +52,10 @@
 .sources-block-identity{display:flex;flex-direction:column;gap:3px;min-width:0}
 .sources-block-summary{color:#647582;font-size:12px;font-weight:400;overflow-wrap:anywhere}
 .sources-block-content{padding:18px;min-width:0}
-.sources-block-menu{position:relative;flex-shrink:0}
-.sources-block-menu summary{list-style:none;display:flex;justify-content:center;align-items:center;width:32px;height:34px;cursor:pointer;border-radius:4px}
-.sources-block-menu summary::-webkit-details-marker{display:none}
-.sources-block-actions{position:absolute;right:0;top:38px;z-index:5;min-width:170px;padding:5px;background:#fff;border:1px solid #ccd7dd;box-shadow:0 4px 14px #0002;border-radius:5px}
-.sources-block-actions button{width:100%;justify-content:flex-start;border:0}
+.sources-block-toolbar{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.sources-block-toolbar>.sources-command{width:34px;height:34px;padding:5px;flex-shrink:0}
+.sources-add-heading{font-size:16px;line-height:1.4;font-weight:400;color:#344959;margin:0 0 8px}
+@media(max-width:600px){.sources-block-heading{flex-wrap:wrap}.sources-block-toggle{flex-basis:100%}.sources-block-toolbar{margin-left:auto}}
 .sources-section-label{font-size:13px;font-weight:650;margin:18px 0 10px;color:#344959;grid-column:1/-1}
 .sources-collection{min-height:40px;margin-bottom:10px;min-width:0}
 .sources-collection .smartbrowser{min-width:0}
@@ -74,9 +77,11 @@
 .sources-filter-input .choices__button_joomla:hover,.sources-filter-input .choices__button_joomla:focus-visible{opacity:1}
 .sources-add{border-style:dashed;color:#076670;min-height:40px}
 .sources-builder-alert{padding:10px 12px;margin-bottom:16px;border-left:3px solid #ca8c28;background:#fff6e6;color:#714711;overflow-wrap:anywhere}
-.sources-editor-token{display:inline-flex;align-items:center;max-width:100%;padding:8px 10px;border:1px solid #8fb5df;border-radius:4px;background:#eef6ff;color:#1f4e79;font:13px/1.4 system-ui,sans-serif;vertical-align:middle;letter-spacing:0}
+.sources-editor-token{display:inline-flex;align-items:center;box-sizing:border-box;max-width:100%;padding:8px 10px;border:1px solid #8fb5df;border-radius:4px;background:#eef6ff;color:#1f4e79;font:13px/1.4 system-ui,sans-serif;vertical-align:middle;letter-spacing:0}
 .sources-editor-token__header{display:flex;align-items:center;gap:16px;justify-content:space-between;width:100%;min-width:0}
 .sources-editor-token__label{font-weight:600;overflow-wrap:anywhere;min-width:0}
+.sources-editor-token__label>strong{display:block;font:inherit}
+.sources-editor-token__summary{display:block;margin-top:3px;color:#647582;font-size:12px;font-weight:400}
 .sources-editor-token__controls{display:inline-flex;align-items:center;gap:3px;flex-shrink:0}
 .sources-editor-token__toolbar{display:none;align-items:center;gap:2px}
 .sources-editor-token--toolbar-open .sources-editor-token__toolbar{display:inline-flex}
@@ -84,17 +89,25 @@
 .sources-editor-command:hover,.sources-editor-command[aria-pressed=true]{color:#16466e;background:#dae7f3}
 .sources-editor-token--render,.sources-editor-token--list_manual,.sources-editor-token--list_full{display:block;margin:8px 0}
 .sources-editor-token--render{background:#fff8e6;border-color:#dba748}
-.sources-editor-token--none{display:block;background:#f6f7f8;color:#304759}
-.sources-editor-token--none .sources-editor-token__label{font:12px/1.5 monospace;white-space:pre-wrap}
-.sources-editor-token__body{display:block;margin-top:10px;color:inherit;max-height:600px;overflow:auto;scrollbar-gutter:stable}
+.sources-editor-token--none{display:block;margin:8px 0}
+.sources-editor-token__body{display:block;margin-top:10px;color:inherit}
+.sources-email-preview{display:block;width:100%;height:1px;min-width:0;border:0;background:#fff;box-sizing:border-box}
 .sources-preview-document{scrollbar-gutter:stable}
+.sources-editor-token--placeholder{display:block;margin:8px 0;box-sizing:border-box}
+.sources-editor-token--placeholder .sources-editor-token__label{flex:1;text-align:center}
+.sources-editor-token__json{display:block;box-sizing:border-box;width:100%;height:auto;min-height:0;max-height:none;field-sizing:content;resize:none;overflow:hidden;margin-top:10px;padding:12px;border:1px solid #cdd6de;border-radius:4px;background:#fff;color:#304759;font:12px/1.5 monospace;white-space:pre-wrap;user-select:text;cursor:text}
 .sources-editor-token--list_manual .sources-editor-token__body,.sources-editor-token--list_full .sources-editor-token__body{padding:12px 16px;background:#fff;border-radius:4px}
 .sources-editor-token__body>.sources-section{margin:0}
 .sources-editor-token__body .sources-preview-list{list-style:disc outside;margin:0;padding-inline-start:20px}
+.sources-editor-token__body ul.sources-preview-list{background:transparent;border:0;border-radius:0;box-shadow:none}
+.sources-editor-token__body .sources-list:has(>ul.sources-preview-list){background:transparent;border:0;border-radius:0;box-shadow:none;overflow:visible}
 .sources-editor-token__body .sources-preview-list>li{display:list-item;margin:4px 0;padding:0;line-height:1.5;overflow-wrap:anywhere}
 .sources-editor-token__body .sources-preview-criteria{margin-top:10px;padding-top:8px;border-top:1px solid #dce5ef;line-height:1.5}
 /* Preview layout follows its available width, not the enclosing editor viewport. */
 :is(.sources-editor-token--render .sources-editor-token__body,.sources-preview-surface){container:sources-preview / inline-size;min-width:0;max-width:100%;box-sizing:border-box}
+:is(.sources-editor-token--render .sources-editor-token__body,.sources-preview-surface){max-width:min(100%,var(--sources-preview-max-width,100%));margin-inline:auto}
+/* Match Joomla's accessibility utility inside isolated editor documents too. */
+:is(.sources-editor-token__body,.sources-preview-surface) .visually-hidden:not(:focus):not(:active){position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 :is(.sources-editor-token--render .sources-editor-token__body,.sources-preview-surface) .sources-grid:has(>.library-card--details,>.sources-item--details){display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
 :is(.sources-editor-token--render .sources-editor-token__body,.sources-preview-surface) .sources-layout--details{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;width:100%;min-width:0;max-width:100%;box-sizing:border-box}
 :is(.sources-editor-token--render .sources-editor-token__body,.sources-preview-surface) .sources-layout--details>*{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
@@ -128,14 +141,14 @@
 .sources-layout-options>.sources-command{display:flex;width:100%;justify-content:flex-start;border:0}
 .sources-layout-options>[aria-selected=true]{background:#e6f4f3;color:#076670}
 .sources-builder-footer>.btn>span{margin-inline-end:.35rem}
-.sources-builder-dialog details.sources-layout-menu,.sources-builder-dialog details.sources-block-menu{margin:0;padding:0;border:0;background:transparent}
+.sources-builder-dialog details.sources-layout-menu{margin:0;padding:0;border:0;background:transparent}
 .sources-builder-dialog details.sources-advanced{margin:18px 0 0;padding:14px 0 0;border:0;border-top:1px solid #e2e7eb;border-radius:0;background:transparent}
-.sources-builder-dialog :is(.sources-layout-menu,.sources-block-menu,.sources-advanced)::details-content{transition:none;overflow:visible;block-size:auto;opacity:1}
-.sources-builder-dialog :is(.sources-layout-menu,.sources-block-menu,.sources-advanced)>summary~*{padding-block-start:0}
+.sources-builder-dialog :is(.sources-layout-menu,.sources-advanced)::details-content{transition:none;overflow:visible;block-size:auto;opacity:1}
+.sources-builder-dialog :is(.sources-layout-menu,.sources-advanced)>summary~*{padding-block-start:0}
 .sources-builder-dialog .sources-layout-menu>.sources-layout-options{padding:4px}
-.sources-builder-dialog .sources-block-menu>.sources-block-actions{padding:5px}
-.sources-add-actions{display:flex;gap:10px;flex-wrap:wrap}
-.sources-add-actions>.sources-add{flex:1;min-width:min(220px,100%);justify-content:flex-start}
+.sources-add-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:8px}
+.sources-add-actions>.sources-add{min-width:0;justify-content:center;font-size:14px;white-space:normal;overflow-wrap:anywhere}
+.sources-add-actions>.sources-add>.fas{flex-shrink:0}
 .sources-merge-ordering{grid-template-columns:repeat(2,minmax(0,1fr))}
 .sources-add-actions{padding:12px;background:#f5f8f9;border:1px solid #d1dbe1;border-radius:6px}
 .sources-add-actions>.sources-add{font-weight:650;background:#f5f8f9;border-style:solid}
@@ -153,3 +166,6 @@
 .sources-item--icons{text-align:center}
 .sources-item--contents{margin-block:16px}
 @media(max-width:767px){.sources-item--details{display:block}}
+/* Details are full rows in final output as well as in editor previews. */
+.sources-section .sources-grid.sources-layout--details{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
+.sources-section .sources-layout--details>*{width:100%;min-width:0;max-width:100%;box-sizing:border-box}

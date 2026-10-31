@@ -5,6 +5,39 @@ import { JSDOM } from 'jsdom';
 import { scan, serialize, validate, newContainer, newBlock, articleIds, MAX_BYTES, ORDERS } from '../package/plugins/editors-xtd/sourcesbutton/media/js/inline.js';
 import { SourcesBuilder } from '../package/plugins/editors-xtd/sourcesbutton/media/js/builder.js';
 
+test('preview dependencies distinguish enabled, access, public policy and installation without changing identity',()=>{
+  const result=spawnSync('php',['tests/php-preview-dependency.php'],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+});
+
+test('numeric drafts validate only applicable controls, reveal collapsed fields and preserve zero/settings',async()=>{
+  for(const type of ['articles','categories','tags'])for(const mode of ['separate','merged'])for(const editing of [false,true]){
+    setup();const config=newContainer();config.blocks=[newBlock(type)];config.display=mode;
+    const builder=new SourcesBuilder(config,editing),complete=builder.open(),record=builder.records.get(builder.config.blocks[0]);
+    const containerLimit=builder.containerSettings.querySelector('input[type=number]');
+    assert.equal(containerLimit.disabled,mode==='separate');
+    if(record.limitField)assert.equal(record.limitField.querySelector('input').disabled,mode==='merged');
+    const applicable=mode==='merged'?containerLimit:record.limitField?.querySelector('input');
+    if(applicable){
+      const previous=mode==='merged'?builder.config.presentation.limit:record.block.filters.limit;
+      for(const value of ['', '-1','501','1.5']){
+        applicable.value=value;applicable.dispatchEvent(new window.Event('input',{bubbles:true}));
+        builder.setExpanded(record,false);
+        assert.equal(builder.validateInputs(),false);
+        assert.equal(applicable.getAttribute('aria-invalid'),'true');
+        if(mode==='separate')assert.equal(record.content.hidden,false);
+        assert.equal(mode==='merged'?builder.config.presentation.limit:record.block.filters.limit,previous);
+      }
+      applicable.value='0';applicable.dispatchEvent(new window.Event('input',{bubbles:true}));
+      assert.equal(builder.validateInputs(),true);
+    }
+    const inactive=mode==='separate'?containerLimit:record.limitField?.querySelector('input');
+    if(inactive){inactive.value='';assert.equal(builder.validateInputs(),true);}
+    builder.confirm.click();const saved=await complete;
+    assert.equal(saved.display,mode);assert.ok(saved.blocks.length);
+  }
+});
+
 test('typed containers round trip nested Unicode JSON and preserve ordered IDs', () => {
   const config = newContainer(); config.blocks[0].title = 'Ελληνικά "} {sources:" \\ <tag>&';
   config.blocks[0].articles = [31,4,31]; config.blocks.push(newBlock('categories'), newBlock('tags'));
@@ -13,11 +46,22 @@ test('typed containers round trip nested Unicode JSON and preserve ordered IDs',
   assert.equal(tokens.length, 2); assert.deepEqual(tokens[0].config, validate(config));
   assert.deepEqual(tokens[0].config.blocks[0].articles, [31,4]); assert.ok(!token.includes('<tag>'));
 });
+
+test('saving clears obsolete manual limits but retains dynamic and container limits',()=>{
+  const config=newContainer();config.blocks[0].filters.limit=16;config.blocks.push(newBlock('categories'),newBlock('tags'));
+  config.blocks[1].filters.limit=12;config.blocks[2].filters.limit=7;config.presentation.limit=23;
+  const saved=scan(serialize(config))[0].config;
+  assert.deepEqual(saved.blocks.map(block=>block.filters.limit),[undefined,12,7]);assert.equal(saved.presentation.limit,23);
+  assert.equal(Object.hasOwn(saved.blocks[0].filters,'limit'),false);
+  for(const obsolete of ['',null,501]) { config.blocks[0].filters.limit=obsolete; assert.equal(Object.hasOwn(scan(serialize(config))[0].config.blocks[0].filters,'limit'),false); }
+  config.blocks[0].filters.limit=16;
+  assert.equal(config.blocks[0].filters.limit,16,'Normalization must not mutate the input object');
+});
 test('legacy, unknown, mixed, unsafe and oversized configurations fail closed', () => {
   assert.equal(scan('{sources:{"version":1,"display":"separate","blocks":[]}}')[0].config, null);
   for (const change of [c=>c.extra=true, c=>c.blocks[0].type='sql', c=>c.blocks[0].articles=[-1],
     c=>c.blocks[0].filters.tags=[8], c=>c.blocks[0].filters.order='SQL', c=>c.ordering.mode='SQL',
-    c=>c.blocks[0].filters.limit=501, c=>c.blocks[0].filters.groupByCategory=true]) {
+    c=>{c.blocks=[newBlock('categories')];c.blocks[0].filters.limit=501}, c=>c.blocks[0].filters.groupByCategory=true]) {
     const config=newContainer();change(config);assert.throws(()=>serialize(config));
   }
   assert.equal(scan('{sources:{"x":"' + 'x'.repeat(MAX_BYTES+5) + '"}}').length,0);
@@ -49,7 +93,7 @@ function setup(compact=false) {
     picks.push(config);const prefix={articles:'article',categories:'category',tags:'tag'}[config.adapter];
     return {items:[{selection:{adapter:config.adapter,id:prefix+':5'},usage:{}}]};
   }};
-  return {instances,picks};
+  return {instances,picks,dom};
 }
 test('three add actions create independent typed collections and node pickers', async () => {
   const {instances,picks}=setup();const builder=new SourcesBuilder(newContainer());const complete=builder.open();
@@ -67,12 +111,113 @@ test('three add actions create independent typed collections and node pickers', 
 test('duplicate, delete and reorder preserve block type and independent state', async () => {
   setup();const original=newContainer();original.blocks=[newBlock('categories')];original.blocks[0].filters.categories=[14];
   const builder=new SourcesBuilder(original),complete=builder.open(),block=builder.config.blocks[0],record=builder.records.get(block);
-  record.card.querySelector('.sources-block-actions button').click();
+  record.card.querySelector('[data-block-action="duplicate"]').click();
   const copy=builder.config.blocks[1];assert.equal(copy.type,'categories');assert.notEqual(copy.filters,block.filters);
   builder.move(copy,-1);assert.equal(builder.config.blocks[0],copy);
   builder.records.get(copy).remove.click();assert.equal(builder.config.blocks.length,1);
   record.toggle.click();assert.equal(record.toggle.firstElementChild.className,'fas fa-chevron-right');
   builder.finish(null);await complete;assert.deepEqual(original.blocks[0].filters.categories,[14]);
+});
+
+test('Expand/Collapse All follows manual toggles and block changes without modifying stored settings', async () => {
+  setup();const config=newContainer();config.blocks.push(newBlock('tags'));
+  const builder=new SourcesBuilder(config),complete=builder.open(),before=serialize(builder.config);
+  assert.equal(builder.expandAll.title,'collapseAll');
+  assert.equal(builder.expandAllLabel.textContent,'collapseAll');
+  builder.expandAll.click();
+  assert.ok([...builder.records.values()].every(record=>record.content.hidden && record.toggle.getAttribute('aria-expanded')==='false'));
+  assert.equal(builder.expandAll.title,'expandAll');
+  assert.equal(builder.expandAllLabel.textContent,'expandAll');
+  builder.records.get(builder.config.blocks[0]).toggle.click();
+  assert.equal(builder.expandAll.title,'collapseAll');
+  builder.expandAll.click();builder.expandAll.click();
+  assert.ok([...builder.records.values()].every(record=>!record.content.hidden));
+  assert.equal(serialize(builder.config),before);
+  builder.expandAll.click();builder.addButtons[0].click();
+  assert.equal(builder.expandAll.title,'collapseAll');
+  assert.equal(builder.records.get(builder.config.blocks.at(-1)).content.hidden,false);
+  builder.config.blocks=[];builder.renderBlocks();assert.equal(builder.expandAll.disabled,true);
+  builder.finish(null);await complete;
+});
+
+test('block clipboard copies validated JSON and pastes at the end, including into an empty Builder', async () => {
+  setup(); let text = '';
+  Object.defineProperty(window.navigator, 'clipboard', { configurable:true, value:{writeText:async value=>{text=value},readText:async()=>text} });
+  const builder=new SourcesBuilder(),complete=builder.open();
+  const heading=builder.list.querySelector('.sources-block-toolbar');
+  assert.deepEqual([...heading.children].map(node=>node.dataset.blockAction || node.title),['up','down','duplicate','copy','delete']);
+  assert.equal(builder.list.querySelector('.sources-block-menu'),null);
+  assert.equal(builder.list.querySelector('[data-block-action="paste"]'),null);
+  assert.ok(builder.add.contains(builder.pasteButton));
+  assert.equal(document.getElementById(builder.add.getAttribute('aria-labelledby'))?.textContent,'addBlock');
+  assert.equal(heading.querySelector('[data-block-action="duplicate"]').children.length,1);
+  assert.ok(heading.querySelector('[data-block-action="duplicate"] .fa-plus'));
+  assert.ok(heading.querySelector('[data-block-action="copy"] .fa-copy'));
+  for(const type of ['articles','categories','tags']) {
+    const block=newBlock(type); block.title='Clipboard '+type;
+    const selection={selection:{adapter:type,id:({articles:'article',categories:'category',tags:'tag'})[type]+':14'},usage:{'ext.fixture':{keep:true}}};
+    if(type==='articles') block.articles=[selection]; else block.filters[type]=[selection];
+    builder.config.blocks=[block]; builder.renderBlocks();
+    await builder.clipboardBlock(block);
+    const expected=validate({...newContainer(),blocks:[block]}).blocks[0];
+    assert.deepEqual(JSON.parse(text),expected);
+    builder.config.blocks=[];builder.renderBlocks();
+    assert.equal(builder.pasteButton.disabled,false);
+    await builder.clipboardBlock(null,true);
+    assert.deepEqual(builder.config.blocks,[expected]);
+    await builder.clipboardBlock(null,true);
+    assert.equal(builder.config.blocks.length,2);
+    assert.notEqual(builder.config.blocks[0].filters,builder.config.blocks[1].filters);
+  }
+  builder.finish(null);await complete;
+});
+
+test('only the last All command persists expansion across Builder instances and reloads',async()=>{
+  const {dom}=setup(),key='supjx.sources.builder.expanded';
+  const config=newContainer();config.blocks.push(newBlock('tags'));
+  let builder=new SourcesBuilder(config),done=builder.open();builder.expandAll.click();
+  assert.equal(window.localStorage.getItem(key),'collapsed');
+  for(const record of builder.records.values())record.toggle.click();
+  assert.equal(window.localStorage.getItem(key),'collapsed');builder.finish(null);await done;
+  builder=new SourcesBuilder(config);done=builder.open();assert.ok([...builder.records.values()].every(r=>r.content.hidden));
+  builder.expandAll.click();assert.equal(window.localStorage.getItem(key),'expanded');
+  for(const record of builder.records.values())record.toggle.click();
+  assert.equal(window.localStorage.getItem(key),'expanded');builder.finish(null);await done;
+  builder=new SourcesBuilder(config);done=builder.open();assert.ok([...builder.records.values()].every(r=>!r.content.hidden));
+  builder.expandAll.click();builder.finish(null);await done;
+  const preference=window.localStorage.getItem(key);setup();window.localStorage.setItem(key,preference);
+  builder=new SourcesBuilder(config,true,{onChange(){}});builder.mount(document.body);
+  assert.ok([...builder.records.values()].every(r=>r.content.hidden));builder.destroy();
+  dom.window.close();
+});
+
+test('blocked storage preserves page-local All preference without breaking editing',async()=>{
+  setup();Object.defineProperty(window,'localStorage',{configurable:true,get(){throw new Error('Blocked')}});
+  let builder=new SourcesBuilder(),done=builder.open();builder.expandAll.click();builder.finish(null);await done;
+  builder=new SourcesBuilder();done=builder.open();assert.equal(builder.records.values().next().value.content.hidden,true);
+  builder.records.values().next().value.toggle.click();builder.finish(null);await done;
+  builder=new SourcesBuilder();done=builder.open();assert.equal(builder.records.values().next().value.content.hidden,true);
+  builder.finish(null);await done;
+});
+
+test('write-only storage failure still honors the last All command on the current page',async()=>{
+  setup();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem(){return 'expanded'},setItem(){throw new Error('Quota')}}});
+  let builder=new SourcesBuilder(),done=builder.open();builder.expandAll.click();builder.finish(null);await done;
+  builder=new SourcesBuilder();done=builder.open();assert.equal(builder.records.values().next().value.content.hidden,true);
+  builder.finish(null);await done;
+});
+
+test('invalid or denied clipboard operations never alter blocks and enforce container limits', async () => {
+  setup(); let text='{"type":"sql"}';
+  Object.defineProperty(window.navigator,'clipboard',{configurable:true,value:{readText:async()=>text,writeText:async()=>{throw new window.DOMException('Denied','NotAllowedError')}}});
+  const builder=new SourcesBuilder(),complete=builder.open(),before=structuredClone(builder.config);
+  for(const value of [text,'not JSON','x'.repeat(MAX_BYTES+1)]) {
+    text=value;await builder.clipboardBlock(null,true);assert.deepEqual(builder.config,before);assert.equal(builder.alert.hidden,false);
+  }
+  await builder.clipboardBlock(builder.config.blocks[0]);assert.deepEqual(builder.config,before);assert.equal(builder.pending,0);
+  text=JSON.stringify(newBlock());builder.config.blocks=Array.from({length:30},()=>newBlock());builder.renderBlocks();
+  assert.equal(builder.pasteButton.disabled,true);await builder.clipboardBlock(null,true);assert.equal(builder.config.blocks.length,30);
+  builder.finish(null);await complete;
 });
 test('common merged ordering disables internal ordering without dropping selection', async () => {
   const {instances}=setup();const config=newContainer();config.blocks[0].articles=[11,4];

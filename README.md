@@ -1,7 +1,114 @@
-# SuperSoftJx - Sources 4.0.0
+# SuperSoftJx - Sources 4.4.3
+
+Unavailable resources now use the regular site/email item layouts. See
+[consumer contract and migration notes](docs/UNAVAILABLE_PRESENTATION.md).
+
+4.4.2 remembers the last Expand All / Collapse All command as a browser preference
+for newly opened dialog and embedded Builders. Individual block toggles do not
+change it. Default is expanded; new blocks remain expanded for immediate editing.
+No expansion preference is written into Sources JSON. Blocked browser storage
+falls back to a page-local preference without preventing editing.
+
+4.4.1 distinguishes preview dependency failures for Content Sources and Sources
+Email: missing, disabled, restricted, public_required, unavailable (runtime/cache)
+and incomplete installation. Checks inspect registration/access without switching
+identity or mutating the plugin cache. Authoring ACL and public-only email output
+remain enforced; email never silently falls back to site presentation.
+The Builder validates applicable owned inputs before schema serialization, disables
+inapplicable numeric controls without discarding their values and reveals collapsed
+invalid inputs. Only its own standalone inner form uses explicit validation;
+the enclosing Joomla form's validation remains enabled. Numeric empty drafts no
+longer silently become zero. Legacy manual-article limits are omitted on
+Builder/embedded saves; dynamic and merged-list limits remain unchanged.
+
+Local diagnosis found both dependencies enabled/public and available, so the
+reported plugin_disabled cause was not reproduced. On the affected installation,
+provide the new AJAX result code and the two plugins' Enabled/Access settings;
+an unavailable code indicates enabled/accessible registration but runtime helper
+unavailability. Do not change Access blindly or bypass the checks.
+
+Verification: targeted native-browser numeric validation passes in eight
+TinyMCE/JCE/theme/viewport configurations, plus embedded owned-field tests.
+The full integration suite still stops at SmartBrowser's empty required
+`sb-address-v-0` controls invalidating the outer form; Sources does not remove
+their constraints or disable the outer form's native validation.
+
+4.4.0 requires SmartBrowser 4.1.2+ for shared resource output. The Content plugin
+has a presentation setting `show_unavailable`: empty string = Use Global (default),
+`1` = Show, `0` = Hide. The native SmartBrowser Unavailablevisibility field displays
+the current translated global Show/Hide value. No selections, Usage or JSON schema
+are changed. Missing manual references retain their ordered identity, pass through
+readonly preparation and reach the shared renderer as neutral unavailable entries;
+no private titles, URLs, images or bodies are fetched to fill missing results.
+Dynamic category/tag queries remain access/publication filtered, without synthetic
+references. Site output and editor summaries/live previews share the setting.
+Email missing references use the same neutral renderer when SmartBrowser is enabled;
+available email articles retain the existing email layout pipeline and public policy.
+Available `sources.item` overrides additionally receive the original `showUnavailable`
+choice and should forward it in shared-renderer options without a boolean cast.
+Unavailable entries go directly to the SmartBrowser renderer, never through article
+template overrides or a Sources-owned notification renderer.
+
+4.3.5 adds a visible translated Expand all / Collapse all label beside the arrows,
+with responsive wrapping of the display toolbar on narrow screens.
+
+4.3.4 uses a plain plus for Duplicate, a 180px minimum add-action width and an
+Expand/Collapse All control opposite Separate/Merged. Collapse state stays UI-only.
+
+4.3.3 labels the add toolbar with an Add new block heading and short block-type
+buttons, standardizes Greek block terminology and distinguishes Duplicate from Copy.
+
+4.3.2 shortens the block-add toolbar labels, adds distinct article/category/tag
+icons and retains descriptive tooltips with responsive button sizing.
+
+4.3.1 adds block Copy/Paste using readable JSON. Duplicate stays in the block
+toolbar; Paste block appends at the bottom, including when there are no blocks.
+Clipboard access requires browser permission and a secure context (HTTPS or
+localhost). Only validated single-block JSON is accepted; selections and Usage
+are preserved without changing the stored Sources schema.
+
+4.3.0 adds a shared `contents_levels` setting (default 3) for site/email.
+Deeper Contents and cycles retain linked article headers instead of failing.
+Email no longer imposes cumulative item/token counts. See the
+[header-only override contract and template prompt](docs/CONTENTS_HEADERS.md).
+
+4.2.1 explains email preview budget failures, including nested Sources in Contents,
+without relaxing final email limits. Preview exceptions are logged to `sources.php`.
+
+4.2.0 adds explicit per-editor site/email preview destinations. Hosts must opt in
+to email; no host/component inference is performed. Email live previews use the
+final email pipeline and overrides while preserving presentation markup inside
+an isolated editor-only surface. See [the consumer contract and examples](docs/PRESENTATION_CONTEXT.md).
+
+4.1.3 aligns the JSON preview's blue frame and surrounding spacing with the
+other static preview modes, without changing its content-sized height.
+
+4.1.2 makes the readonly JSON preview fit its actual text height while retaining
+selection/copy support in JCE and TinyMCE.
+
+4.1.1 fixes editor module-cache invalidation across upgrades, including relative
+imports, and removes the template's preview-list container decoration.
+
+4.1.0 adds the optional **Newsletter - SuperSoftJx - Sources Email 1.0.0**
+provider for Newsletter Bridge protocol v1. It uses public-only shared selection
+and independent, overrideable email layouts; native article emails do not require
+SmartBrowser. Enable the provider with Public access after installation.
+See [email output, overrides and limitations](docs/EMAIL_OUTPUT.md).
+
+4.0.3 separates Sources-field data consumption from rendering, reuses bounded
+request-local snapshots and avoids eager legacy field preparation. Local Catichisi
+profiling and consumer instructions are documented in [PERFORMANCE.md](docs/PERFORMANCE.md).
+
+4.0.2 standardizes localized extension names and release metadata. See
+[the changelog](CHANGELOG.md). Technical identities and existing functionality are unchanged.
+
+4.0.1 fixes Details rows in final output: the Sources Details grid now uses one
+full-width column independently of the template's Cards grid. Other view geometry
+is unchanged. Run `node tests/views-browser.mjs` for the five-view regression suite.
 
 Major release: [release notes and upgrade guidance](docs/RELEASE_4.0.0.md).
-Requires SmartBrowser 3.16.0+. The Sources storage schema remains version 2.
+Frontend editing/output requires SmartBrowser 4.0.0+. Native email output does
+not require it. The Sources storage schema remains version 2.
 
 Sources item markup is overrideable at
 `templates/YOUR_TEMPLATE/html/layouts/sources/item.php`.
@@ -24,11 +131,16 @@ Sources field skip legacy rendering to avoid duplicates. Old values remain intac
 No stored data or editor forms are changed. A missing template leaves content unchanged.
 This bridge does not fix frontend article-form binding.
 
-Sources supports inline article-content Containers and an optional article Custom Field. The package installs Content - Sources, Button - Sources and Fields - Sources. Inline editing remains independent of Custom Fields; no new database tables are added.
+Sources supports inline article-content Containers and an optional article Custom Field. The package **SuperSoftJx - Sources** installs **Content - SuperSoftJx - Sources**, **Button - SuperSoftJx - Sources** and **Fields - SuperSoftJx - Sources**. Inline editing remains independent of Custom Fields; no new database tables are added.
 
 ## Optional Sources Field
 
 Enable **Fields - SuperSoftJx - Sources**, **Content - SuperSoftJx - Sources** and **Button - SuperSoftJx - Sources**.
+
+In Greek Joomla these appear as **Πεδία - SuperSoftJx - Sources**,
+**Περιεχόμενο - SuperSoftJx - Sources** and **Κουμπί - SuperSoftJx - Sources**.
+The extension author is **SuperSoft — Kontarinis Andreas**; SuperSoft remains
+the code/namespace identity, while SuperSoftJx is the extension display brand.
 Create an article field of type **SupJx Sources (sources)**, assign your own Field Group and
 categories, and set **Automatic Display: After Display** (the default for new
 Sources fields). Hide the field label if only the block headings should appear.
@@ -131,7 +243,7 @@ The integration requires SmartBrowser **3.16.0+**, including Shared Picker Opera
 - Collection Add/Replace use SmartBrowser's shared operations via `pickerUrl`, without Sources callbacks or a second merge. Add opens empty and retains existing identities and Usage; Replace edits the complete selection with the current resource focused and Information open.
 - One complete `onChange({ items })` updates the ordered Sources selection, including Usage/extension data. Resolved metadata/resource HTML are not serialized. Cancellation retains the original selection.
 - Compact taxonomy fields and secondary filters retain their independent criteria Picker flow. External collection commands delegate to `add()` / `editSelection(resource)` and catch rejected promises.
-- The Button - Sources setting `taxonomy_editor` chooses Selection View (default) or compact native dropdown + picker for both primary categories and primary tags. Optional cross-filters remain native dropdowns. This setting changes only editing UI, not storage/selection semantics.
+- The Button - SuperSoftJx - Sources setting `taxonomy_editor` chooses Selection View (default) or compact native dropdown + picker for both primary categories and primary tags. Optional cross-filters remain native dropdowns. This setting changes only editing UI, not storage/selection semantics.
 - Every adapter uses the full Selection View, including preview and ordering. Category sequence affects category-and-article order; tag order is retained but does not alter AND criteria.
 - Collection instances are updated through setItems. A changed ordering policy requires remounting through the public API because SmartBrowser does not expose a configuration-update method.
 - Picker and Builder use native dialog top-layer/focus handling, without Bootstrap modal traps.

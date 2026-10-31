@@ -64,7 +64,10 @@ namespace {
         public function getLanguage() { return \Joomla\CMS\Factory::getLanguage(); }
         public function getIdentity() { return new \Joomla\CMS\User\User(); }
         public function getDocument() { return new class {
-            public function getWebAssetManager() { return new class { public function registerAndUseScript(...$args) {} }; }
+            public function getWebAssetManager() { return new class {
+                public function registerAndUseScript(...$args) {}
+                public function getAsset(...$args) { return new class { public function getVersion() { return 'fixture'; } }; }
+            }; }
         }; }
     };
     $plugin = new \SuperSoft\Plugin\Fields\Sources\Extension\Sources();

@@ -24,7 +24,9 @@ final class SourcesField extends FormField
                 }
                 Factory::getApplication()->bootPlugin('sourcesbutton', 'editors-xtd')->loadAssets();
                 Factory::getApplication()->getDocument()->getWebAssetManager()->registerAndUseScript(
-                    'plg.sources.field', 'plg_editors-xtd_sourcesbutton/field.js', ['version' => 'auto'], ['type' => 'module'], ['plg.sources.inline']
+                    'plg.sources.field', 'plg_editors-xtd_sourcesbutton/field.js',
+                    ['version' => Factory::getApplication()->getDocument()->getWebAssetManager()->getAsset('script', 'plg.sources.inline')->getVersion()],
+                    ['type' => 'module'], ['plg.sources.inline']
                 );
             }
         } catch (\Throwable $error) {

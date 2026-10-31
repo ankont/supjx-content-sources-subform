@@ -1,13 +1,19 @@
 <?php
 namespace Joomla\Registry {
-    class Registry { public function get($key, $default = null) { return $default; } }
+    class Registry { public function __construct(private array $values = []) {} public function get($key, $default = null) { return $this->values[$key] ?? $default; } }
 }
 namespace Joomla\Database { interface DatabaseInterface {} }
 namespace Joomla\String {
     class StringHelper { public static function substr($value, $start, $length) { return substr($value, $start, $length); } }
 }
-namespace Joomla\CMS\Component { class ComponentHelper { public static function isEnabled($name) { return true; } } }
+namespace Joomla\CMS\Component { class ComponentHelper {
+    public static int $globalVisibility = 0;
+    public static array $presentation = [];
+    public static function isEnabled($name) { return true; }
+    public static function getParams($name) { return new \Joomla\Registry\Registry(['selection_show_unavailable' => self::$globalVisibility] + self::$presentation); }
+} }
 namespace Joomla\CMS\HTML { class HTMLHelper { public static function _($name, $text, ...$args) { return $text; } } }
+namespace Joomla\CMS\Language { class Text { public static function _($key) { return 'Read the full article by following its title.'; } } }
 namespace SuperSoft\Component\Smartbrowser\Administrator\Support {
     class SelectionFieldSupport {
         public static function configuration($value) { return $value; }
@@ -37,6 +43,8 @@ namespace {
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/InlineConfig.php';
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/InlineTokens.php';
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/InlineRenderer.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/RequestCache.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/SourceFieldData.php';
     use Joomla\CMS\Factory;
     use Joomla\CMS\Layout\FileLayout;
     use SuperSoft\Plugin\Content\Sources\Support\InlineConfig;
@@ -72,7 +80,45 @@ namespace {
     $unavailable = clone $article; $unavailable->id = 4;
     $before = serialize($article);
     $items = $prepare->invoke($renderer, [$article, $unavailable]);
-    check(array_keys($items) === ['article:11'], 'Unavailable resource survived readonly preparation');
+    check(isset($items['article:11'], $items['article:4']) && $items['article:4']['unavailable'] && !isset($items['article:4']['resource']), 'Readonly preparation must retain neutral unavailable references: ' . json_encode($items));
+    foreach ([0,1] as $global) foreach (['','1','0'] as $local) {
+        \Joomla\CMS\Component\ComponentHelper::$globalVisibility = $global;
+        $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry(['show_unavailable' => $local]));
+        $expected = $local === '' ? (bool) $global : $local === '1';
+        check(Output::showUnavailable($local) === $expected, 'Use Global was cast before resolution');
+        foreach (InlineConfig::LAYOUTS as $layout) foreach (['output','preview'] as $purpose) {
+            $count = $dispatcher->calls;
+            $html = $render->invoke($renderer, $unavailable, $layout, $items['article:4'], $purpose);
+            check(($html !== '') === $expected && (! $expected || str_contains($html, 'sources-item--' . $layout)), 'Sources unavailable renderer matrix failed');
+            if ($expected) {
+                $data = end(FileLayout::$itemData);
+                check($data['unavailable'] && !$data['header_only'] && $data['fallback_reason'] === null && $data['layout'] === $layout, 'Unavailable/header-only contract confused');
+                check($data['item']->id === 0 && $data['item']->introtext === '' && $data['selected']['selection'] === null && $data['selected']['usage'] === [], 'Private unavailable model leaked');
+            }
+            check($dispatcher->calls === $count && !str_contains($html, 'Local') && !str_contains($html, 'href="/article') && !str_contains($html, 'override.jpg'), 'Unavailable data or image presentation leaked');
+        }
+    }
+    foreach ([false, true] as $image) foreach ([false, true] as $icon) {
+        \Joomla\CMS\Component\ComponentHelper::$presentation = ['selection_unavailable_text' => 'Safe message',
+            'selection_unavailable_image_enabled' => (int) $image, 'selection_unavailable_image' => 'images/placeholder.jpg',
+            'selection_unavailable_icon_enabled' => (int) $icon, 'selection_unavailable_icon' => 'fa-ban'];
+        $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry(['show_unavailable' => '1']));
+        FileLayout::$overrides['sources.item'] = static function ($data) use ($image, $icon) {
+            check($data['unavailable'] && $data['item']->title === 'Safe message', 'Unavailable override bypassed');
+            check((bool) $data['unavailable_presentation']['image'] === $image && (bool) $data['unavailable_presentation']['icon'] === $icon, 'Configured visual lost');
+            check(!str_contains(json_encode($data), 'Local') && !str_contains(json_encode($data), 'override.jpg'), 'Override received private fields');
+            return 'safe-' . $data['layout'];
+        };
+        foreach (InlineConfig::LAYOUTS as $layout) {
+            $count = $dispatcher->calls;
+            check($render->invoke($renderer, $unavailable, $layout, $items['article:4'], 'preview') === 'safe-' . $layout, 'Wrong view at override');
+            check($dispatcher->calls === $count, 'Forced image presentation');
+        }
+    }
+    unset(FileLayout::$overrides['sources.item']);
+    \Joomla\CMS\Component\ComponentHelper::$presentation = [];
+    \Joomla\CMS\Component\ComponentHelper::$globalVisibility = 0;
+    $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry());
     foreach (InlineConfig::LAYOUTS as $layout) {
         foreach (['output', 'preview'] as $purpose) {
             $count = $dispatcher->calls;
@@ -99,7 +145,7 @@ namespace {
     $received = null;
     FileLayout::$overrides['sources.item'] = static function ($data) use (&$received, $render, $renderer) {
         $received = $data;
-        check(array_keys($data) === ['item', 'layout', 'selected', 'purpose', 'parent_article_id'], 'Item layout contract changed');
+        check(array_keys($data) === ['item', 'layout', 'selected', 'purpose', 'parent_article_id', 'showUnavailable', 'unavailable', 'unavailable_presentation', 'header_only', 'fallback_reason', 'depth', 'read_more_text'], 'Item layout contract changed');
         check($render->invoke($renderer, $data['item'], 'cards', $data['selected'], 'preview') === '', 'Override recursion bypassed Sources guard');
         $data['item']->title = 'Override-local title';
         return '<aside>Template-only output</aside>';
@@ -111,7 +157,26 @@ namespace {
     FileLayout::$overrides['sources.item'] = static fn($data) => Output::render($data['selected'], ['purpose' => $data['purpose']]);
     $html = $render->invoke($renderer, $article, 'contents', $items['article:11'], 'output', 77);
     check($dispatcher->calls === $count + 1 && str_contains($html, 'data-sb-image-presentation="server"'), 'Override must own its one renderer call');
-    check($render->invoke($renderer, $article, 'contents', $items['article:11'], 'output', 11) === '', 'Contents self-embedding allowed');
+    FileLayout::$overrides['sources.item'] = static function ($data) {
+        check($data['header_only'] && $data['fallback_reason'] === 'cycle' && $data['item']->introtext === '' && $data['item']->fulltext === '', 'Cycle must publish a detached empty body and header contract');
+        return 'Linked header';
+    };
+    check($render->invoke($renderer, $article, 'contents', $items['article:11'], 'output', 11) === 'Linked header', 'Contents self-reference must retain linked header');
+    $seenDepths = [];
+    FileLayout::$overrides['sources.item'] = static function ($data) use (&$seenDepths, $render, $renderer) {
+        $seenDepths[] = [$data['depth'], $data['header_only'], $data['fallback_reason']];
+        if ($data['header_only']) { return 'Depth header'; }
+        $child = clone $data['item']; $child->id++;
+        return $render->invoke($renderer, $child, 'contents', $data['selected'], 'output', $data['item']->id);
+    };
+    check($render->invoke($renderer, $article, 'contents', $items['article:11'], 'output', 77) === 'Depth header'
+        && $seenDepths === [[1, false, null], [2, false, null], [3, false, null], [4, true, 'depth']], 'Site Contents must expand three levels and retain fourth-level headers');
+    check($article->introtext !== '', 'Header fallback mutated original article');
+    $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry(['contents_levels' => 2]));
+    $seenDepths = [];
+    check($render->invoke($renderer, $article, 'contents', $items['article:11'], 'output', 77) === 'Depth header'
+        && $seenDepths === [[1, false, null], [2, false, null], [3, true, 'depth']], 'Site must respect the same configured depth as email');
+    $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry());
     FileLayout::$overrides['sources.item'] = static function ($data) { ob_start(); echo 'partial'; throw new \RuntimeException('Fixture error'); };
     $level = ob_get_level();
     try { $render->invoke($renderer, $article, 'cards', $items['article:11'], 'output'); }

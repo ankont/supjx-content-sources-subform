@@ -18,6 +18,8 @@ namespace {
         }
     });
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/InlineRenderer.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/RequestCache.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/SourceFieldData.php';
     $app = new class {
         public bool $site = true;
         public function isClient($client) { return $client === ($this->site ? 'site' : 'administrator'); }
@@ -34,6 +36,7 @@ namespace {
     $renderer = $reflection->newInstanceWithoutConstructor();
     $reflection->getProperty('app')->setValue($renderer, $app);
     $reflection->getProperty('db')->setValue($renderer, $db);
+    $reflection->getProperty('params')->setValue($renderer, new \Joomla\Registry\Registry());
     $render = $reflection->getMethod('resourceItem');
     $dirs = []; $files = [];
     $make = static function ($path) use (&$make, &$dirs) {

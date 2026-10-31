@@ -16,6 +16,12 @@ final class Sources extends CMSPlugin
     public function onContentPrepare($context, &$article, &$params, $page = 0): void
     {
         $app = Factory::getApplication();
+        // A Contents preview keeps the article body, but never expands its Sources tree.
+        if (InlineRenderer::isContentsPreview() && in_array($context, ['com_content.article', 'com_content.category', 'com_content.featured'], true)
+            && is_object($article) && isset($article->text) && is_string($article->text)) {
+            $article->text = InlineTokens::replace($article->text, static fn() => '');
+            return;
+        }
         if (!$app->isClient('site') || !in_array($context, ['com_content.article', 'com_content.category', 'com_content.featured'], true)
             || !is_object($article) || !isset($article->text) || !is_string($article->text)
             || $app->getInput()->getCmd('layout') === 'edit' || $app->getInput()->getCmd('view') === 'form' || self::$renderDepth >= 3) {

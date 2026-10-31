@@ -7,6 +7,7 @@ $packageManifestPath = Join-Path $packageRoot 'pkg_sources.xml'
 $contentPluginRoot = Join-Path $packageRoot 'plugins\content\sources'
 $editorPluginRoot = Join-Path $packageRoot 'plugins\editors-xtd\sourcesbutton'
 $fieldPluginRoot = Join-Path $packageRoot 'plugins\fields\sources'
+$emailPluginRoot = Join-Path $packageRoot 'plugins\newsletter\sourcesemail'
 $buildRoot = Join-Path $repoRoot 'build'
 $stageRoot = Join-Path $buildRoot 'stage'
 $outputRoot = Join-Path $buildRoot 'output'
@@ -96,7 +97,8 @@ $requiredPaths = @(
     $packageRoot,
     $contentPluginRoot,
     $editorPluginRoot,
-    $fieldPluginRoot
+    $fieldPluginRoot,
+    $emailPluginRoot
 )
 
 foreach ($requiredPath in $requiredPaths) {
@@ -127,6 +129,8 @@ New-ZipFromDirectoryContents -SourceDirectory $contentPluginRoot -DestinationZip
 New-ZipFromDirectoryContents -SourceDirectory $editorPluginRoot -DestinationZip $editorZip
 $fieldZip = Join-Path $pluginsStageRoot 'plg_fields_sources.zip'
 New-ZipFromDirectoryContents -SourceDirectory $fieldPluginRoot -DestinationZip $fieldZip
+$emailZip = Join-Path $pluginsStageRoot 'plg_newsletter_sourcesemail.zip'
+New-ZipFromDirectoryContents -SourceDirectory $emailPluginRoot -DestinationZip $emailZip
 
 $packageStage = Join-Path $stageRoot 'package'
 New-Item -ItemType Directory -Path $packageStage | Out-Null
@@ -137,6 +141,7 @@ Copy-Item -Path $packageManifestPath -Destination $packageStage -Force
 Copy-Item -Path $contentZip -Destination $packageFilesStage -Force
 Copy-Item -Path $editorZip -Destination $packageFilesStage -Force
 Copy-Item -Path $fieldZip -Destination $packageFilesStage -Force
+Copy-Item -Path $emailZip -Destination $packageFilesStage -Force
 
 $packageLanguageSource = Join-Path $packageRoot 'language'
 if (Test-Path $packageLanguageSource) {

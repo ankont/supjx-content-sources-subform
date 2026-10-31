@@ -1,5 +1,13 @@
 const requests = new WeakMap();
 
+export function previewRequestKey(node) {
+  return JSON.stringify([node.dataset.sourcesToken, node.dataset.sourcesPreviewMode, node.dataset.sourcesPresentation || 'site']);
+}
+
+export function cancelPreviewRequest(node) {
+  requests.get(node)?.controller.abort(); requests.delete(node);
+}
+
 export function appendPreviewStyles(doc, styles, base) {
   for (const href of Array.isArray(styles) ? styles : []) {
     if (typeof href !== 'string') continue;
@@ -23,6 +31,6 @@ export function startPreviewRequest(node, key) {
   return {
     signal: controller.signal,
     current: () => node.isConnected && !controller.signal.aborted && requests.get(node) === request
-      && JSON.stringify([node.dataset.sourcesToken, node.dataset.sourcesPreviewMode]) === key,
+      && previewRequestKey(node) === key,
   };
 }

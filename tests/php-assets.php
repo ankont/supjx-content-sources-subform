@@ -35,7 +35,7 @@ namespace {
     $destination = $root . '/media/plg_editors-xtd_sourcesbutton';
     $created = [];
     try {
-        foreach (['js/sourcesbutton.js', 'js/inline.js', 'js/usage.js', 'js/builder.js', 'js/field.js', 'css/sourcesbutton.css'] as $file) {
+        foreach (['js/sourcesbutton.js', 'js/preview-ui.js', 'js/preview-request.js', 'js/inline.js', 'js/usage.js', 'js/builder.js', 'js/field.js', 'css/sourcesbutton.css'] as $file) {
             $directory = dirname($destination . '/' . $file);
             if (!is_dir($directory)) mkdir($directory, 0777, true);
             copy($package . '/editors-xtd/sourcesbutton/media/' . $file, $destination . '/' . $file);
@@ -57,6 +57,17 @@ namespace {
             }
             $broken = new \Joomla\CMS\WebAsset\WebAssetItem('old-broken-path', 'plg_editors-xtd_sourcesbutton/js/sourcesbutton.js');
             check($broken->getUri() === '', 'Reproduce 2.0.0 failure: duplicated js segment silently resolves to no script.');
+            $key = $prefix . '/media/plg_editors-xtd_sourcesbutton/js/preview-ui.js';
+            $moduleAssets = ['preview' => new \Joomla\CMS\WebAsset\WebAssetItem('preview', 'plg_editors-xtd_sourcesbutton/preview-ui.js',
+                ['version' => 'graph-fingerprint', 'importmap' => true, 'importmapName' => $key])];
+            $document = (new \ReflectionClass(\Joomla\CMS\Document\HtmlDocument::class))->newInstanceWithoutConstructor();
+            $document->setMediaVersion('unchanged-global-version');
+            $renderer = new \Joomla\CMS\Document\Renderer\Html\ScriptsRenderer($document);
+            $markup = (new \ReflectionMethod($renderer, 'renderImportmap'))->invokeArgs($renderer, [&$moduleAssets]);
+            $dom = new \DOMDocument(); $dom->loadHTML($markup);
+            $map = json_decode($dom->getElementsByTagName('script')->item(0)->textContent, true, 512, JSON_THROW_ON_ERROR);
+            check($map['imports'][$key] === $key . '?graph-fingerprint', 'Actual Joomla import-map renderer must use the graph hash, not global auto version.');
+            check($moduleAssets === [], 'Import map registrations must not eagerly execute dependencies.');
         }
         echo 'Joomla WebAsset resolver assertions passed';
     } finally {

@@ -10,13 +10,16 @@ namespace SuperSoft\Component\Smartbrowser\Administrator\Support {
     class SelectionFieldSupport {
         public static bool $readOnly = false;
         public static bool $unavailable = false;
+        public static int $calls = 0;
         public static function configuration($settings) { return $settings; }
         public static function prepare($raw, $settings, $resolver = null, $readOnly = null) {
+            self::$calls++;
             self::$readOnly = $readOnly;
             $value = json_decode($raw, true);
             foreach ($value['items'] as &$entry) {
                 $entry['usage'] ??= [];
-                $entry['resource'] = ['id' => $entry['selection']['id'], 'title' => 'Article ' . substr($entry['selection']['id'], 8), 'metadata' => ['kept' => true]];
+                $entry['resource'] = ['id' => $entry['selection']['id'], 'title' => 'Article ' . substr($entry['selection']['id'], 8),
+                    'metadata' => ['kept' => true, 'object' => (object) ['value' => 'original']]];
                 $entry['unavailable'] = self::$unavailable;
                 $id = $entry['usage']['visual.thumbnailOverride']['id'] ?? '';
                 $entry['effectiveThumbnail'] = $id === 'missing' ? null : $id;
@@ -26,7 +29,9 @@ namespace SuperSoft\Component\Smartbrowser\Administrator\Support {
         }
     }
     class SelectionOutputRenderer {
+        public static function showUnavailable($value = null) { return in_array($value, [true,1,'1'], true); }
         public static function render($selected, $options) {
+            if (!empty($selected['unavailable'])) { return self::showUnavailable($options['showUnavailable'] ?? '') ? '<span>Unavailable</span>' : ''; }
             $id = (int) substr($selected['selection']['id'], 8);
             \Joomla\CMS\Layout\LayoutHelper::$calls[] = [$options['layout'], [
                 'item' => (object) ['id' => $id], 'selected' => $selected,
@@ -48,9 +53,15 @@ namespace Joomla\CMS\Log {
 namespace Joomla\CMS {
     class Factory {
         public static $db;
+        public static int $userId = 1;
+        public static array $levels = [1, 2];
         public static string $view = 'article';
         public static function getApplication() { return new class {
-            public function getIdentity() { return new class { public function getAuthorisedViewLevels() { return [1, 2]; } }; }
+            public function getIdentity() { return new class {
+                public int $id;
+                public function __construct() { $this->id = Factory::$userId; }
+                public function getAuthorisedViewLevels() { return Factory::$levels; }
+            }; }
             public function getLanguageFilter() { return true; }
             public function getLanguage() { return new class { public function getTag() { return 'el-GR'; } }; }
             public function isClient($client) { return $client === 'site'; }
@@ -69,12 +80,14 @@ namespace Joomla\CMS {
 }
 namespace Joomla\CMS\Layout {
     class FileLayout {
+        public static $onRender = null;
         public function __construct(private $id, $base, $options) {
             if ($base !== null) throw new \RuntimeException('High-priority layout base path');
         }
         public function getDefaultIncludePaths() { return []; }
         public function setIncludePaths($paths) { return $this; }
         public function render($displayData) {
+            if (self::$onRender) { (self::$onRender)($displayData); }
             ob_start();
             include dirname(__DIR__) . '/package/plugins/content/sources/layouts/sources/item.php';
             return ob_get_clean();
@@ -103,6 +116,8 @@ namespace {
     require __DIR__ . '/../package/plugins/content/sources/src/Support/InlineConfig.php';
     require __DIR__ . '/../package/plugins/content/sources/src/Support/InlineTokens.php';
     require __DIR__ . '/../package/plugins/content/sources/src/Support/InlineRenderer.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/RequestCache.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/SourceFieldData.php';
     class Query {
         public array $clauses = [];
         public function __call($name, $args) { $this->clauses[] = $name . ':' . implode('|', $args); return $this; }
@@ -128,7 +143,23 @@ namespace {
     $renderer = new InlineRenderer(new Registry(['heading_tag' => 'script']));
     $config = InlineConfig::decode('{"version":2,"display":"separate","presentation":{"title":"Merged","layout":"list","limit":0},"blocks":[{"type":"articles","title":"<unsafe>","articles":[11,4,99],"filters":{"limit":0},"presentation":{"layout":"cards"}},{"type":"tags","title":"Dynamic","filters":{"tags":[8,12],"categories":[14],"limit":0}},{"type":"articles","title":"Second","articles":[4],"presentation":{"layout":"contents"}}]}');
     $result = $renderer->resolve($config['blocks'][0]);
-    check(array_column($result, 'id') === [11, 4], 'Manual order and unavailable omission');
+    check(array_column($result, 'id') === [11, 4, 99] && $result[2]->title === '' && $result[2]->sources_unavailable, 'Manual order retains neutral unavailable reference');
+    $missingBlock = $config['blocks'][0]; $missingBlock['articles'] = [11,99,4,98,97];
+    $missingRows = $renderer->resolve($missingBlock);
+    check(array_column($missingRows,'id') === [11,99,4,98,97], 'Deleted/unpublished/inaccessible references must retain exact manual positions');
+    $missingPrepared = $renderer->prepareOutput($missingRows);
+    foreach ([99,98,97] as $id) check($missingPrepared['article:'.$id]['unavailable'] && !isset($missingPrepared['article:'.$id]['resource']), 'Preparation must not fill denied query rows with article metadata');
+    $visible = new InlineRenderer(new Registry(['show_unavailable'=>'1']));
+    $missingConfig = $config; $missingConfig['blocks'] = [$missingBlock];
+    $summary = $visible->render($missingConfig,(object)['id'=>100],'list_manual','preview');
+    check(substr_count($summary,'Unavailable') === 3 && strpos($summary,'Article 11') < strpos($summary,'Unavailable') && strpos($summary,'Unavailable') < strpos($summary,'Article 4'), 'Summary preview must keep neutral notices in selection order');
+    $legacySummary = $missingConfig; $legacySummary['blocks'][0]['filters']['limit'] = 16;
+    $legacySummary = InlineConfig::decode(json_encode($legacySummary));
+    foreach (['list_manual','list_full'] as $previewMode) {
+        $manualPreview = $visible->render($legacySummary,(object)['id'=>100],$previewMode,'preview');
+        check(!str_contains($manualPreview,'PLG_CONTENT_SOURCES_CRITERIA_LIMIT'), 'Manual preview must not display obsolete limit metadata');
+    }
+    LayoutHelper::$calls = [];
     check(array_column($renderer->resolve($config['blocks'][1]), 'id') === [4,8], 'Tags produce dynamic sources with category restriction');
     $sql = implode(' ', Factory::$db->queries);
     foreach (['a.state = 1', 'c.published = 1', 'a.access IN (1,2)', 'c.access IN (1,2)', 'publish_up', 'publish_down', 'ancestor.access', 'a.language', 'c.language', 'COUNT(DISTINCT m.tag_id) = 2', 'a.catid IN (14)', 'a.publish_up DESC, a.created DESC, a.id DESC'] as $guard) check(str_contains($sql, $guard), 'Missing selection guard: ' . $guard);
@@ -146,7 +177,7 @@ namespace {
     LayoutHelper::$calls = []; $renderer->render($config, (object) ['id' => 100]);
     check(array_map(fn($call) => $call[1]['item']->id, LayoutHelper::$calls) === [8,4,11], 'Common ordering overrides block/manual order after dedupe');
     $limited = $config['blocks'][0]; $limited['filters']['limit'] = 1;
-    check(array_column($renderer->resolve($limited, true, 'title-desc'), 'id') === [4,11], 'Explicit manual selection is never truncated by a block limit');
+    check(array_column($renderer->resolve($limited, true, 'title-desc'), 'id') === [4,11,99], 'Explicit manual selection is never truncated by a block limit');
     $category = InlineConfig::decode('{"version":2,"display":"separate","blocks":[{"type":"categories","filters":{"categories":[19,14],"order":"ordering-asc"}}]}')['blocks'][0];
     $before = count(Factory::$db->queries); $renderer->resolve($category);
     check(count(Factory::$db->queries) === $before + 1, 'Categories alone enable dynamic selection');
@@ -200,8 +231,10 @@ namespace {
     $usageConfig['blocks'][0]['presentation']['layout'] = 'details';
     check(str_contains($renderer->render($usageConfig, (object) ['id' => 100]), 'sources-layout--details'), 'Rendered Details carries an explicit layout marker independent of template wrappers');
     \SuperSoft\Component\Smartbrowser\Administrator\Support\SelectionFieldSupport::$unavailable = true;
+    \SuperSoft\Plugin\Content\Sources\Support\RequestCache::reset();
     check($renderer->render($usageConfig, (object) ['id' => 100]) === '', 'All unavailable prepared candidates produce no block or heading');
     \SuperSoft\Component\Smartbrowser\Administrator\Support\SelectionFieldSupport::$unavailable = false;
+    \SuperSoft\Plugin\Content\Sources\Support\RequestCache::reset();
     $usageConfig['blocks'][0]['articles'][0]['usage']['visual.thumbnailOverride']['id'] = 'javascript:alert(1)';
     $unsafe = $renderer->resolve($usageConfig['blocks'][0]);
     check(!isset(json_decode($unsafe[0]->images, true)['image_intro']), 'Unsafe resolved thumbnails never enter article presentation');

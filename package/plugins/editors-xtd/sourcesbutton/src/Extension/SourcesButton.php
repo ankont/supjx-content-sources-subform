@@ -18,6 +18,8 @@ use Joomla\Event\SubscriberInterface;
 use Joomla\Registry\Registry;
 use SuperSoft\Plugin\Content\Sources\Support\InlineConfig;
 use SuperSoft\Plugin\Content\Sources\Support\InlineRenderer;
+use SuperSoft\Plugin\Content\Sources\Support\EmailPreview;
+use SuperSoft\Plugin\EditorsXtd\SourcesButton\Support\PreviewDependency;
 use SuperSoft\Component\Smartbrowser\Administrator\Support\CollectionViewSupport;
 
 final class SourcesButton extends CMSPlugin implements SubscriberInterface
@@ -49,6 +51,16 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         $assets = $document->getWebAssetManager();
         $stylesheet = (defined('JPATH_PUBLIC') ? JPATH_PUBLIC : JPATH_ROOT) . '/media/plg_editors-xtd_sourcesbutton/css/sourcesbutton.css';
         $styleVersion = (is_readable($stylesheet) ? hash_file('sha256', $stylesheet) : null) ?: 'auto';
+        $moduleDirectory = dirname($stylesheet, 2) . '/js';
+        $moduleVersion = self::moduleVersion($moduleDirectory);
+        // Relative ESM imports do not inherit the entry script's query string.
+        // Map every module URL through Joomla's native import map to one graph fingerprint.
+        foreach (glob($moduleDirectory . '/*.js') ?: [] as $module) {
+            $filename = basename($module);
+            $assets->registerAndUseScript('plg.sources.module.' . $filename, 'plg_editors-xtd_sourcesbutton/' . $filename,
+                ['version' => $moduleVersion, 'importmap' => true,
+                    'importmapName' => Uri::root(true) . '/media/plg_editors-xtd_sourcesbutton/js/' . $filename]);
+        }
         $assets->useStyle('fontawesome');
         $assets->usePreset('choicesjs')->useScript('webcomponent.field-fancy-select');
         $dependencies = ['editors', 'webcomponent.field-fancy-select'];
@@ -65,13 +77,15 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
             }
         }
         $keys = ['builder', 'insert', 'update', 'cancel', 'addBlock', 'addSources', 'title', 'sources', 'presentation', 'filters',
-            'tags', 'categories', 'limit', 'layout', 'separate', 'merged', 'display', 'duplicate', 'delete', 'up', 'down', 'actions',
+            'tags', 'categories', 'limit', 'layout', 'separate', 'merged', 'display', 'expandAll', 'collapseAll', 'duplicate', 'copyBlock', 'pasteBlock', 'clipboardUnavailable', 'clipboardInvalid', 'delete', 'up', 'down', 'actions',
             'untitled', 'edit', 'settings', 'none', 'placeholder', 'list_manual', 'list_full', 'render', 'unavailable', 'invalid', 'conflict',
             'cards', 'details', 'list', 'icons', 'contents', 'advancedTags', 'advancedCategories', 'maximize', 'restore',
-            'articles', 'selected', 'name', 'caption', 'type_articles', 'type_categories', 'type_tags', 'add_articles', 'add_categories', 'add_tags', 'order', 'mergeOrdering', 'blockOrderingHint', 'blocks', 'global',
+            'articles', 'selected', 'name', 'caption', 'type_articles', 'type_categories', 'type_tags', 'add_articles', 'add_categories', 'add_tags', 'addShort_articles', 'addShort_categories', 'addShort_tags', 'pasteShort', 'order', 'mergeOrdering', 'blockOrderingHint', 'blocks', 'global',
             'published-desc', 'published-asc', 'created-desc', 'created-asc', 'title-asc', 'title-desc', 'ordering-asc',
-            'previewPermission', 'previewResponse', 'previewEmpty', 'previewNetwork', 'previewFailed', 'previewInvalid', 'previewDisabled'];
+            'previewPermission', 'previewResponse', 'previewEmpty', 'previewNetwork', 'previewFailed', 'previewBudget', 'previewInvalid', 'previewDisabled', 'previewBlocks', 'previewSelectedArticles'];
         $i18n = [];
+        $keys = [...$keys, 'validationLimit', 'validationField'];
+        foreach (['Content', 'Email'] as $dependency) foreach (['Missing','Disabled','Restricted','PublicRequired','Unavailable','Incomplete'] as $status) { $keys[] = 'preview' . $dependency . $status; }
         foreach ($keys as $key) { $i18n[$key] = Text::_('PLG_EDITORSXTD_SOURCESBUTTON_INLINE_' . strtoupper(str_replace('-', '_', $key))); }
         $document->addScriptOptions('plg_editorsxtd_sourcesbutton.inline', [
             'previewMode' => $this->params->get('editor_preview_mode', 'placeholder'),
@@ -85,8 +99,16 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
             'editorSizeUrl' => ComponentHelper::isEnabled('com_smartbrowser') ? Uri::root(true) . '/media/com_smartbrowser/js/picker-size.js' : '',
         ]);
         $assets->registerAndUseStyle('plg.sources.inline', 'plg_editors-xtd_sourcesbutton/sourcesbutton.css', ['version' => $styleVersion]);
-        $assets->registerAndUseScript('plg.sources.inline', 'plg_editors-xtd_sourcesbutton/sourcesbutton.js', ['version' => 'auto'], ['type' => 'module'], $dependencies);
+        $assets->registerAndUseScript('plg.sources.inline', 'plg_editors-xtd_sourcesbutton/sourcesbutton.js', ['version' => $moduleVersion], ['type' => 'module'], $dependencies);
         $loaded = true;
+    }
+
+    public static function moduleVersion(string $directory): string
+    {
+        $files = glob($directory . '/*.js') ?: []; sort($files, SORT_STRING);
+        $hash = hash_init('sha256');
+        foreach ($files as $file) { hash_update($hash, basename($file) . ':' . hash_file('sha256', $file) . "\n"); }
+        return hash_final($hash);
     }
 
     private function filterFields(): array
@@ -122,15 +144,27 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
         if (!$allowed) { throw new \RuntimeException('Sources preview not authorised.', 403); }
         $stage = 'bootstrap';
         try {
-            if (!PluginHelper::isEnabled('content', 'sources')) {
-                return ['ok' => false, 'html' => '', 'code' => 'plugin_disabled'];
-            }
+            $stage = 'validation';
+            $presentation = $app->getInput()->post->getString('presentation', 'site');
+            if (!in_array($presentation, ['site', 'email'], true)) { throw new \InvalidArgumentException('Invalid presentation context.'); }
+            $stage = 'dependencies';
+            $code = PreviewDependency::check('content', 'sources', $presentation === 'email');
+            if ($code !== null) { return ['ok' => false, 'html' => '', 'code' => $code]; }
             $app->bootPlugin('sources', 'content');
             $stage = 'validation';
             $json = $app->getInput()->post->get('configuration', '', 'RAW');
             $config = InlineConfig::decode((string) $json);
             $mode = $app->getInput()->post->getCmd('mode', 'render');
             if (!in_array($mode, ['list_manual', 'list_full', 'render'], true)) { throw new \InvalidArgumentException('Invalid preview mode.'); }
+            if ($presentation === 'email') {
+                $stage = 'dependencies';
+                $code = PreviewDependency::check('newsletter', 'sourcesemail', true);
+                if ($code !== null) { return ['ok' => false, 'html' => '', 'code' => $code]; }
+                $stage = 'render';
+                return ['ok' => true, 'html' => EmailPreview::render($config, $mode), 'styles' => [],
+                    'presentation' => 'email', 'purpose' => 'preview', 'mode' => $mode,
+                    'renderer' => $mode === 'render' ? 'EmailRenderer' : 'InlineRendererSummary'];
+            }
             $plugin = PluginHelper::getPlugin('content', 'sources');
             $stage = 'render';
             $renderer = new InlineRenderer(new Registry($plugin->params ?? ''));
@@ -142,10 +176,14 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
                     if ($uri !== '') { $styles[] = $uri; }
                 }
             }
-            return ['ok' => true, 'html' => $html, 'styles' => array_values(array_unique($styles))];
+            return ['ok' => true, 'html' => $html, 'styles' => array_values(array_unique($styles)),
+                'presentation' => 'site', 'purpose' => 'preview', 'mode' => $mode, 'renderer' => 'InlineRenderer'];
         } catch (\Throwable $error) {
+            \Joomla\CMS\Log\Log::addLogger(['text_file' => 'sources.php'], \Joomla\CMS\Log\Log::ALL, ['sources']);
             \Joomla\CMS\Log\Log::add('Sources preview [' . $stage . ']: ' . $error->getMessage(), \Joomla\CMS\Log\Log::WARNING, 'sources');
-            return ['ok' => false, 'html' => '', 'code' => $stage === 'validation' ? 'invalid_configuration' : 'render_failed'];
+            $budget = $stage === 'render' && ($presentation ?? 'site') === 'email'
+                && in_array($error->getMessage(), ['sources.email.budget', 'sources.email.bytes', 'Email preview budget exceeded'], true);
+            return ['ok' => false, 'html' => '', 'code' => $stage === 'validation' ? 'invalid_configuration' : ($budget ? 'email_budget' : 'render_failed')];
         }
     }
 }

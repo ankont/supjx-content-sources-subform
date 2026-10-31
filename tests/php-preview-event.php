@@ -14,9 +14,21 @@ namespace Joomla\CMS\Session {
     class Session { public static bool $valid = true; public static function checkToken($method) { return self::$valid; } }
 }
 namespace Joomla\CMS\Log {
-    class Log { public const WARNING = 1; public static function add(...$arguments) {} }
+    class Log { public const WARNING = 1, ALL = 31; public static function add(...$arguments) {} public static function addLogger(...$arguments) {} }
+}
+namespace SuperSoft\Plugin\EditorsXtd\SourcesButton\Support {
+    class PreviewDependency {
+        public static array $codes = [];
+        public static function check($group, $element, $publicOnly) {
+            return self::$codes[$group] ?? (\Joomla\CMS\Plugin\PluginHelper::$enabled ? null : ($group==='content' ? 'content_plugin_disabled' : 'email_plugin_disabled'));
+        }
+    }
 }
 namespace SuperSoft\Plugin\Content\Sources\Support {
+    class EmailPreview {
+        public static string $failure = 'sources.email.budget';
+        public static function render(...$arguments) { throw new \RuntimeException(self::$failure); }
+    }
     class InlineRenderer {
         public static bool $fail = false;
         public function __construct($params) {}
@@ -46,6 +58,7 @@ namespace {
     class PreviewApplication extends \Joomla\Application\AbstractApplication {
         public string $json = '{"version":2,"display":"separate","blocks":[{"type":"articles","articles":[4]}]}';
         public string $mode = 'list_manual';
+        public string $presentation = 'site';
         public bool $allowed = true;
         protected function doExecute() {}
         public function getIdentity() { return new class($this->allowed) {
@@ -56,11 +69,12 @@ namespace {
         }; }
         public function isClient($client) { return $client === 'site'; }
         public function bootPlugin(...$args) {}
-        public function getInput() { return new class($this->json, $this->mode) {
+        public function getInput() { return new class($this->json, $this->mode, $this->presentation) {
             public $post;
-            public function __construct(private string $json, private string $mode) { $this->post = $this; }
+            public function __construct(private string $json, private string $mode, private string $presentation) { $this->post = $this; }
             public function get(...$args) { return $this->json; }
             public function getCmd(...$args) { return $this->mode; }
+            public function getString(...$args) { return $this->presentation; }
         }; }
     }
     function check($condition, $message) { if (!$condition) throw new \RuntimeException($message); }
@@ -85,14 +99,30 @@ namespace {
         check($json['success'] === true && $json['data'][0]['html'] === $results[0]['html'], 'Actual com_ajax JSON envelope contains preview data');
     }
     \Joomla\CMS\Plugin\PluginHelper::$enabled = false;
-    check($dispatch()[0]['code'] === 'plugin_disabled', 'Disabled plugin response is attached to event');
+    check($dispatch()[0]['code'] === 'content_plugin_disabled', 'Disabled content dependency is distinguished');
     \Joomla\CMS\Plugin\PluginHelper::$enabled = true;
     $valid = $app->json; $app->json = '{"version":999}';
     check($dispatch()[0]['code'] === 'invalid_configuration', 'Invalid schema has an explicit error code');
     $app->json = $valid;
+    $app->presentation = 'email';
+    foreach (['missing','disabled','restricted','public_required','unavailable','incomplete'] as $status) {
+        \SuperSoft\Plugin\EditorsXtd\SourcesButton\Support\PreviewDependency::$codes = ['newsletter'=>'email_plugin_'.$status];
+        check($dispatch()[0]['code'] === 'email_plugin_'.$status, 'Email dependency failure must never fall back to site rendering');
+    }
+    \SuperSoft\Plugin\EditorsXtd\SourcesButton\Support\PreviewDependency::$codes = [];
+    $app->presentation = 'site';
+    $app->presentation = 'unknown'; check($dispatch()[0]['code'] === 'invalid_configuration', 'Client cannot choose arbitrary render contexts'); $app->presentation = 'site';
     \SuperSoft\Plugin\Content\Sources\Support\InlineRenderer::$fail = true;
     $failure = $dispatch()[0];
     check($failure['code'] === 'render_failed' && !str_contains(json_encode($failure), 'SQL'), 'Rendering errors do not expose private diagnostics');
+    $app->presentation = 'email';
+    foreach (['sources.email.budget', 'sources.email.bytes', 'Email preview budget exceeded'] as $message) {
+        \SuperSoft\Plugin\Content\Sources\Support\EmailPreview::$failure = $message;
+        check($dispatch()[0]['code'] === 'email_budget', 'Email bounds have an actionable public error code');
+    }
+    \SuperSoft\Plugin\Content\Sources\Support\EmailPreview::$failure = 'Private SQL/server details';
+    check($dispatch()[0]['code'] === 'render_failed', 'Unknown email exceptions stay private');
+    $app->presentation = 'site';
     \Joomla\CMS\Session\Session::$valid = false;
     try { $dispatch(); throw new \LogicException('CSRF must fail'); }
     catch (\RuntimeException $error) { check($error->getCode() === 403, 'CSRF checks remain enforced'); }

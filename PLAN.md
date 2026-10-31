@@ -1,6 +1,130 @@
 # Sources Package Plan
 
-_Last updated: 2026-10-17_
+_Last updated: 2026-10-28_
+
+### 4.4.2 Initial Expansion Preference
+
+- Persist only All commands; individual toggles and validation reveals do not write preferences.
+- Apply on reopen to dialog/embedded Builders; keep new blocks open for editing.
+
+### 4.4.1 Preview Dependencies and Validation
+
+- Safe per-dependency diagnostics; enabled is not equivalent to current/public access.
+- Applicable-control validation, collapsed-field reveal and canonical manual limits.
+- Local registration is public/enabled/available; original plugin_disabled cause
+  requires the new code from the affected request rather than an Access assumption.
+- Targeted browser numeric cases pass across eight contexts; the full embedded
+  integration remains blocked by SmartBrowser sb-address-v-0 required controls.
+  No outer validation bypass or other-repository changes are included.
+
+### 4.4.0 Unavailable Visibility
+
+- Native SmartBrowser 4.1.2 Use Global/Show/Hide presentation setting.
+- Ordered manual references and shared neutral rendering, without private data.
+- Dynamic candidates remain filtered; no selection/Usage/schema migration.
+
+### 4.3.5 Expansion Labels
+
+- Visible translated Expand all / Collapse all text with responsive wrapping.
+
+### 4.3.4 Builder Expansion Controls
+
+- Plain plus Duplicate, 180px minimum add actions and shared Expand/Collapse All.
+- Expansion state is UI-only and follows individual toggles and block changes.
+
+### 4.3.3 Block Action Clarity
+
+- Labeled add section, block-type labels and consistent Greek terminology.
+- Mirrored duplicate icon with plus marker, distinct from standard Copy.
+- Verification: 46 regression tests pass; add-section/tool icons visually checked.
+  Full browser save flow is currently blocked by empty required SmartBrowser
+  sb-address-v-0 textareas in the integration fixture; no validation bypass added.
+
+### 4.3.2 Compact Add Toolbar
+
+- Short labels and distinct icons, with full tooltips and responsive grid sizing.
+
+### 4.3.1 Block Clipboard
+
+- Direct move/duplicate/copy/delete controls; Paste block beside the add actions.
+- Validated single-block JSON clipboard transfer with Usage and selection order.
+
+### 4.3.0 Contents Header Fallback
+
+- Shared contents_levels plugin setting for site/email, default 3.
+- Header-only fallback for deeper articles and cycles, using existing overrides.
+- Remove cumulative email item/token caps; retain byte and ACL protection.
+
+### 4.2.1 Email Preview Diagnostics
+
+- Report bounded email expansion failures clearly without raising budgets.
+- Register a Sources log for caught rendering exceptions.
+
+### 4.2.0 Explicit Preview Presentation
+
+- Per-editor site/email declarations and runtime API; site remains the default.
+- Same email renderer/overrides as final output, with scoped public identity.
+- Context-aware request cancellation, Builder/nested propagation and readonly
+  sandboxed surfaces preserving email markup without changing stored tokens.
+- Consumer contract: docs/PRESENTATION_CONTEXT.md; no host/template edits.
+
+### 4.1.3 Consistent Preview Frames
+
+- Give JSON the same blue frame and 8px vertical margins as static previews.
+- Apply border-box sizing consistently without changing JSON selection/autosizing.
+- Compare computed margins, padding, colours and width in JCE/TinyMCE fixtures.
+
+### 4.1.2 Content-Sized JSON Preview
+
+- Preserve the proven readonly native selection control and existing frame.
+- Remove fixed minimum height and manual resize; use field-sizing with fallback.
+- Verify growing/shrinking, no internal overflow, selection and unchanged storage
+  on native TinyMCE and forced-fallback JCE at mobile/desktop widths.
+
+### 4.1.1 Editor Asset Cache Invalidation
+
+- Installed 4.1.0 local JS/CSS hashes match package source; stale browser URLs
+  remain possible because Joomla auto media versions are not extension versions.
+- Version every relative module through native Joomla import maps with a full
+  graph fingerprint; share it between editor and field entry scripts.
+- Warm immutable-cache browser regression and actual Joomla import-map rendering
+  cover dependency-only changes and subdirectory installs.
+- Remove template sources-list decoration only inside editor preview bodies.
+
+### 4.1.0 Optional Email Provider
+
+- Package/existing plugins 4.1.0; new newsletter/sourcesemail provider 1.0.0.
+- Exact Newsletter Bridge protocol v1, no bridge classes or mail side effects.
+- Shared public-only bounded resolver and provider-owned Joomla email overrides.
+- Native Contents/modern Sources fields, explicit unsupported resource Usage errors.
+- Local loader/event/lifecycle checks use transient tables and memory-only mail.
+- See docs/EMAIL_OUTPUT.md for setup, override contracts and limitations.
+
+### 4.0.3 Sources Rendering Amplification
+
+- Add explicit SourceFieldData data-only consumption and cycle-safe field rendering.
+- Scope non-Contents item metadata/readonly resolution to data-only Sources fields.
+- Cache detached query/selection snapshots, never HTML; key full Usage and policy/context.
+- Raw legacy preflight avoids full preparation on absent/migrated sources and disabled append.
+- Actual local paired profiling: TTFB 34.018s -> 4.479s; FieldsHelper 10387 -> 1209; selection prepare 945 -> 95; resourceItem 588 -> 60; render 18 -> 2.
+- Thirty visible source cards retain order, text, links, image URLs/styles/markers and pins.
+- Original runtime restored with hashes. Catichisi eager landing work remains separate; docs/PERFORMANCE.md records scope/limitations.
+
+### 4.0.2 Extension Display Names and Metadata
+
+- Localize Greek Joomla plugin-group labels while retaining the SuperSoftJx display brand.
+- Normalize current README and preview-warning references to full extension display names.
+- Set full author SuperSoft — Kontarinis Andreas and release date 2026-10-19, including the previously incomplete Fields plugin.
+- Bump package and all three plugins from 4.0.1 to 4.0.2; preserve technical identities and prior Details work.
+- Add changelog and metadata regression tests. No commit/push/release requested.
+
+### 4.0.1 Final Output Details Grid
+
+- Apply the one-column Details grid to normal Sources output, not just editor previews.
+- Bound direct row wrappers without touching template visuals, presentation providers or image styles.
+- Test all five modes against actual template CSS, with default/template-shaped markup at 390/900/1440px and both stylesheet orders.
+- Compare non-Details geometry against the pre-fix stylesheet; preserve Cards/List/Icons/Contents dimensions.
+- No storage, renderer, template, legacy-compatibility or other-extension changes.
 
 ### 4.0.0 Major Release
 

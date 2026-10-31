@@ -1,44 +1,18 @@
 import { JoomlaEditor, JoomlaEditorButton } from 'editor-api';
 import { scan, serialize } from './inline.js';
 import { SourcesBuilder } from './builder.js';
-import { startPreviewRequest, appendPreviewStyles } from './preview-request.js';
+import { tokenNode, rememberPreviewMode, requestTokenPreview, mountNestedPreviews, refreshPresentation, disposeTokenPreview } from './preview-ui.js';
+import { bindPresentationDocument, observeEditorPresentation, setEditorPresentation, getEditorPresentation, documentPresentation } from './presentation-context.js';
+export { tokenNode } from './preview-ui.js';
+export { setEditorPresentation, getEditorPresentation } from './presentation-context.js';
+window.SuperSoftSourcesPreview = { setPresentation: setEditorPresentation, getPresentation: getEditorPresentation };
 
 const config = window.Joomla?.getOptions('plg_editorsxtd_sourcesbutton.inline', {}) || {};
 const t = key => config.i18n?.[key] || key;
 const modes = ['none', 'placeholder', 'list_manual', 'list_full', 'render'];
-const modeIcons = ['code', 'minus-square', 'list', 'check-square', 'eye'];
 const bound = new WeakSet();
 const documentBindings = new WeakSet();
 let opening = false;
-
-function command(doc, key, icon, attribute) {
-  const button = doc.createElement('button'); button.type = 'button'; button.title = t(key); button.setAttribute('aria-label', t(key));
-  button.className = 'sources-editor-command'; button.setAttribute(attribute, key);
-  const glyph = doc.createElement('span'); glyph.className = 'fas fa-' + icon; glyph.setAttribute('aria-hidden', 'true'); button.append(glyph); return button;
-}
-
-export function tokenNode(doc, token, mode = config.previewMode || 'placeholder') {
-  if (!modes.includes(mode)) mode = 'placeholder';
-  const node = doc.createElement('span'); node.className = 'sources-editor-token mceNonEditable sources-editor-token--' + mode;
-  node.dataset.sourcesToken = token.raw; node.dataset.sourcesPreviewMode = mode;
-  node.contentEditable = 'false'; node.setAttribute('data-mce-contenteditable', 'false'); node.setAttribute('data-mce-resize', 'false');
-  node.tabIndex = 0; node.setAttribute('role', 'group'); node.setAttribute('aria-label', config.badgeLabel || 'Sources');
-  const heading = doc.createElement('span'); heading.className = 'sources-editor-token__header';
-  const label = doc.createElement('span'); label.className = 'sources-editor-token__label';
-  label.textContent = mode === 'none' ? token.raw : (config.badgeLabel || 'Sources') + ' · ' + token.config.blocks.length + ' · ' + t(token.config.display);
-  const controls = doc.createElement('span'); controls.className = 'sources-editor-token__controls';
-  const toolbar = doc.createElement('span'); toolbar.className = 'sources-editor-token__toolbar';
-  modes.forEach((id, index) => {
-    const control = command(doc, id, modeIcons[index], 'data-sources-mode'); control.setAttribute('aria-pressed', String(id === mode)); toolbar.append(control);
-  });
-  controls.append(toolbar, command(doc, 'settings', 'cog', 'data-sources-settings'), command(doc, 'edit', 'pencil-alt', 'data-sources-edit'));
-  heading.append(label, controls); node.append(heading);
-  if (['list_manual', 'list_full', 'render'].includes(mode)) {
-    const body = doc.createElement('span'); body.className = 'sources-editor-token__body'; body.textContent = '…'; node.append(body);
-  }
-  return node;
-}
-
 export function restoreTokens(root) {
   root.querySelectorAll('.sources-editor-token[data-sources-token]').forEach(node => {
     node.replaceWith(node.ownerDocument.createTextNode(node.dataset.sourcesToken));
@@ -73,44 +47,11 @@ function decorateHtml(html, doc) {
   return html;
 }
 
-function payload(value) {
-  if (value && typeof value === 'object' && typeof value.html === 'string') return value;
-  if (Array.isArray(value)) { for (const entry of value) { const found = payload(entry); if (found) return found; } }
-  if (value && typeof value === 'object') { for (const key of ['data', 'result', 'results']) { const found = payload(value[key]); if (found) return found; } }
-  return null;
-}
-
-function preview(node) {
-  if (!node.querySelector('.sources-editor-token__body') || !config.ajaxUrl) return;
-  const token = scan(node.dataset.sourcesToken)[0]; if (!token?.config) return;
-  const request = startPreviewRequest(node, JSON.stringify([node.dataset.sourcesToken, node.dataset.sourcesPreviewMode]));
-  if (!request) return;
-  const data = new URLSearchParams({ configuration: JSON.stringify(token.config), mode: node.dataset.sourcesPreviewMode, [config.csrfToken]: '1' });
-  fetch(config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin', signal: request.signal })
-    .catch(() => { throw new Error(t('previewNetwork')); })
-    .then(async response => {
-      if ([401, 403].includes(response.status)) throw new Error(t('previewPermission'));
-      if (!response.ok) throw new Error(t('previewFailed') + ' (HTTP ' + response.status + ')');
-      try { return await response.json(); } catch { throw new Error(t('previewResponse')); }
-    })
-    .then(json => {
-      if (!request.current()) return;
-      const result = payload(json), body = node.querySelector('.sources-editor-token__body');
-      if (result?.ok === true && typeof result.html === 'string') {
-        appendPreviewStyles(node.ownerDocument, result.styles, document.baseURI);
-        body.innerHTML = result.html;
-      }
-      else {
-        const keys = { plugin_disabled: 'previewDisabled', invalid_configuration: 'previewInvalid', render_failed: 'previewFailed' };
-        let key = result ? keys[result.code] || 'previewFailed' : 'previewEmpty';
-        if (!result && json?.success === false) key = json.message === 'Sources preview not authorised.' ? 'previewPermission' : 'previewFailed';
-        body.textContent = t(key);
-      }
-    }).catch(error => { if (request.current()) node.querySelector('.sources-editor-token__body').textContent = error.message || t('previewFailed'); });
-}
+function preview(node) { return requestTokenPreview(node, config); }
 
 export function decorateDocument(doc) {
   if (!doc?.body) return;
+  mountNestedPreviews(doc);
   for (const href of [config.contentCss, config.fontAwesomeUrl].filter(Boolean)) {
     const url = new URL(href, document.baseURI);
     const existing = [...doc.querySelectorAll('link[data-sources-css]')].find(link => new URL(link.href, doc.baseURI).pathname === url.pathname);
@@ -129,9 +70,13 @@ export function decorateDocument(doc) {
     fragment.append(doc.createTextNode(text.data.slice(offset))); text.replaceWith(fragment);
   }
   doc.querySelectorAll('.sources-editor-token').forEach(node => {
+    if (!node.dataset.sourcesNestedPreview && node.dataset.sourcesPresentation !== documentPresentation(doc)) {
+      disposeTokenPreview(node); node.dataset.sourcesPresentation = documentPresentation(doc);
+      node.querySelector('.sources-editor-token__body')?.replaceChildren();
+    }
     // Editors can sanitize button elements during SetContent. Restore editor-only controls after parsing.
     const controls = node.querySelector('.sources-editor-token__controls');
-    if (!controls || controls.querySelectorAll('[data-sources-mode]').length !== modes.length ||
+    if (!node.querySelector('.sources-editor-token__summary') || !controls || controls.querySelectorAll('[data-sources-mode]').length !== modes.length ||
         controls.querySelector('button[disabled]') || !controls.querySelector('[data-sources-edit] .fas')) {
       const token = scan(node.dataset.sourcesToken)[0];
       if (token?.config) {
@@ -141,7 +86,7 @@ export function decorateDocument(doc) {
         else node.prepend(fresh.firstElementChild);
       }
     }
-    preview(node);
+    if (!node.dataset.sourcesNestedPreview) preview(node);
   });
 }
 
@@ -154,13 +99,24 @@ function on(editor, name, callback) {
 export function bindEditor(editor) {
   if (!editor?.getDoc || bound.has(editor)) return;
   bound.add(editor);
+  bindPresentationDocument(editor.getDoc(), editor);
+  const stopPresentation = observeEditorPresentation(editor, presentation => {
+    const doc = editor.getDoc(); bindPresentationDocument(doc, editor);
+    if (doc?.body) refreshPresentation(doc, presentation);
+  });
+  on(editor, 'Remove', () => {
+    stopPresentation(); const doc = editor.getDoc();
+    doc?.querySelectorAll('.sources-editor-token').forEach(disposeTokenPreview); bound.delete(editor);
+  });
   const decorate = () => {
     if (editor.isHidden?.()) return;
     const doc = editor.getDoc(); if (!doc?.body) return;
+    bindPresentationDocument(doc, editor);
     if (!documentBindings.has(doc)) {
       documentBindings.add(doc);
       doc.body.addEventListener('click', event => {
         const target = event.target.closest?.('.sources-editor-token'); if (!target) return;
+        if (target.dataset.sourcesNestedPreview) return;
         if (event.target.closest('.sources-editor-command')) event.stopPropagation();
         if (event.target.closest('[data-sources-settings]')) { event.preventDefault(); target.classList.toggle('sources-editor-token--toolbar-open'); }
         else if (event.target.closest('[data-sources-edit]')) { event.preventDefault(); openBuilder(null, editor, target); }
@@ -169,17 +125,18 @@ export function bindEditor(editor) {
           if (control) {
             event.preventDefault(); const token = scan(target.dataset.sourcesToken)[0]; if (!token?.config) return;
             const replacement = tokenNode(doc, token, control.dataset.sourcesMode); replacement.classList.add('sources-editor-token--toolbar-open');
-            target.replaceWith(replacement); preview(replacement);
+            rememberPreviewMode(control.dataset.sourcesMode);
+            disposeTokenPreview(target); target.replaceWith(replacement); preview(replacement);
           }
         }
       }, true);
       doc.body.addEventListener('dblclick', event => {
         const target = event.target.closest?.('.sources-editor-token');
-        if (target && !event.target.closest('button,a')) { event.preventDefault(); openBuilder(null, editor, target); }
+        if (target && !target.dataset.sourcesNestedPreview && !event.target.closest('button,a,textarea')) { event.preventDefault(); openBuilder(null, editor, target); }
       });
       doc.body.addEventListener('keydown', event => {
         const target = event.target.closest?.('.sources-editor-token');
-        if (target && event.key === 'Enter' && !event.target.closest('button')) { event.preventDefault(); openBuilder(null, editor, target); }
+        if (target && !target.dataset.sourcesNestedPreview && event.key === 'Enter' && !event.target.closest('button')) { event.preventDefault(); openBuilder(null, editor, target); }
       });
     }
     decorateDocument(doc);
@@ -192,6 +149,7 @@ export function bindEditor(editor) {
     event.content = decodeSerializedTokens(event.content);
   });
   on(editor, 'BeforeSetContent', event => {
+    bindPresentationDocument(editor.getDoc(), editor);
     if (typeof event.content === 'string' && event.content.includes('{sources:') && !event.content.includes('data-sources-token')) {
       event.content = decorateHtml(event.content, editor.getDoc() || document);
     }
@@ -247,7 +205,7 @@ export async function openBuilder(joomlaEditor, visualEditor = rawEditor(joomlaE
         visual.focus();
         if (target) {
           const next = tokenNode(visual.getDoc(), scan(token)[0], target.dataset.sourcesPreviewMode);
-          target.replaceWith(next); visual.selection.select(next); preview(next);
+          disposeTokenPreview(target); target.replaceWith(next); visual.selection.select(next); preview(next);
         } else { visual.selection.moveToBookmark(bookmark); visual.insertContent(tokenNode(visual.getDoc(), scan(token)[0]).outerHTML); }
         visual.nodeChanged?.(); visual.setDirty?.(true); decorateDocument(visual.getDoc());
       };

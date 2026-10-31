@@ -16,6 +16,8 @@ namespace Joomla\Component\Fields\Administrator\Helper {
 namespace {
     define('JPATH_SITE', __DIR__);
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/LegacySources.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/RequestCache.php';
+    require_once dirname(__DIR__) . '/package/plugins/content/sources/src/Support/SourceFieldData.php';
     use SuperSoft\Plugin\Content\Sources\Support\LegacySources;
     use Joomla\Component\Fields\Administrator\Helper\FieldsHelper;
     function check($ok, $message) { if (!$ok) { throw new \RuntimeException($message); } }

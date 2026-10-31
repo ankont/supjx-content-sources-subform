@@ -9,6 +9,10 @@ $tokens = InlineTokens::scan('before ' . $data['valid'] . ' middle ' . $data['fu
 check(count($tokens) === 3, 'Multiple containers');
 check(json_decode(json_encode($tokens[0]['config']), true) === $data['expected'], 'Client/server schema parity');
 check(InlineConfig::decode('{"version":2.0,"display":"separate","blocks":[{"type":"articles","articles":[1e1],"filters":{"limit":16.0}}]}')['blocks'][0]['articles'] === [10], 'JSON integer numeric forms');
+foreach ([16, 0, '', null, 501] as $obsolete) {
+    $legacy = ['version'=>2,'display'=>'separate','blocks'=>[['type'=>'articles','articles'=>[10],'filters'=>['limit'=>$obsolete]]]];
+    check(!array_key_exists('limit', InlineConfig::decode(json_encode($legacy))['blocks'][0]['filters']), 'Obsolete manual limits must not survive PHP canonical JSON');
+}
 check($tokens[1]['config'] === null, 'Unknown version is preserved');
 $rendered = InlineTokens::replace('before ' . $data['valid'] . ' middle ' . $data['future'] . ' after', fn() => '<section>rendered</section>');
 check($rendered === 'before <section>rendered</section> middle ' . $data['future'] . ' after', 'Exact token position and invalid content retention');

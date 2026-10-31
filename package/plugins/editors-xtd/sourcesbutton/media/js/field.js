@@ -1,12 +1,16 @@
 import { SourcesBuilder } from './builder.js';
 import { newContainer, validate, serialize, MAX_BYTES } from './inline.js';
 import { appendPreviewStyles } from './preview-request.js';
+import { mountNestedPreviews, readOnlyPreviewBlock, previewErrorKey } from './preview-ui.js';
+import { getEditorPresentation, observeEditorPresentation, validatePresentation } from './presentation-context.js';
 
 const mounted = new WeakMap();
 const options = () => window.Joomla?.getOptions('plg_editorsxtd_sourcesbutton.inline', {}) || {};
 
-export function mountSourcesField(host) {
-  if (mounted.has(host)) return mounted.get(host);
+export function mountSourcesField(host, previewContext = null) {
+  if (mounted.has(host)) {
+    const instance = mounted.get(host); if (previewContext) instance.configurePreviewContext(previewContext); return instance;
+  }
   const input = host.querySelector('.sources-field-value');
   if (!input || input.disabled || input.readOnly || input.dataset.locked === '1') return null;
   const labels = JSON.parse(host.dataset.labels || '{}');
@@ -22,16 +26,24 @@ export function mountSourcesField(host) {
   preview.append(icon, document.createTextNode(' ' + labels.preview)); toolbar.append(preview);
   host.prepend(alert, surface); host.append(toolbar);
   let builder, lastDraft, syncing = false, integrationFailed = false, destroyed = false, request, previewDialog, previewFrame;
+  let contextEditor = previewContext?.editorId || null;
+  let explicitPresentation = previewContext?.presentation == null ? null : validatePresentation(previewContext.presentation);
+  const currentPresentation = () => explicitPresentation ?? getEditorPresentation(contextEditor);
+  const contextChanged = () => {
+    request?.abort();
+    if (previewDialog?.open) queueMicrotask(() => { if (previewDialog?.open && !destroyed) void showPreview(); });
+  };
+  let stopContext = observeEditorPresentation(contextEditor, contextChanged);
   const required = input.required;
   const fail = message => { alert.textContent = message; alert.hidden = false; };
   const parse = raw => {
     if (new TextEncoder().encode(raw).length > MAX_BYTES) throw new Error(labels.invalid);
     return raw.trim() ? validate(JSON.parse(raw)) : newContainer();
   };
-  const write = config => {
+  const write = (config, force = false) => {
     const next = config.blocks.length ? (serialize(config), JSON.stringify(validate(config))) : '';
     const draft = JSON.stringify(config);
-    if (draft !== lastDraft) {
+    if (force || draft !== lastDraft) {
       lastDraft = draft;
       if (previewDialog?.open) queueMicrotask(() => { if (previewDialog?.open && !destroyed) void showPreview(); });
       if (next !== input.value) {
@@ -80,7 +92,8 @@ export function mountSourcesField(host) {
     preview.disabled = !builder?.config.blocks.length || !!builder?.pending;
   };
   const showPreview = async () => {
-    if (!builder || builder.pending || !builder.config.blocks.length) return;
+    if (!builder || builder.pending || !builder.config.blocks.length || !builder.validateInputs()) return;
+    let controller;
     try {
       serialize(builder.config);
       closePreview();
@@ -97,14 +110,18 @@ export function mountSourcesField(host) {
       document.body.append(previewDialog); previewDialog.showModal();
       const currentDialog = previewDialog, frame = previewFrame;
       const snapshot = JSON.stringify(validate(builder.config));
-      const settings = options(), body = new URLSearchParams({ configuration: snapshot, mode: 'render' });
-      body.set(settings.csrfToken, '1'); request = new AbortController(); preview.disabled = true;
-      const response = await fetch(settings.ajaxUrl, { method: 'POST', credentials: 'same-origin', body, signal: request.signal });
+      const presentation = currentPresentation();
+      const settings = { ...options(), presentation }, body = new URLSearchParams({ configuration: snapshot, mode: 'render', presentation });
+      body.set(settings.csrfToken, '1'); controller = new AbortController(); request = controller; preview.disabled = true;
+      const response = await fetch(settings.ajaxUrl, { method: 'POST', credentials: 'same-origin', body, signal: controller.signal });
       if (!response.ok) throw new Error();
       const json = await response.json();
       const result = Array.isArray(json.data) ? json.data[0] : json.data;
-      if (!json.success || !result?.ok || typeof result.html !== 'string') throw new Error();
-      if (previewDialog !== currentDialog || snapshot !== JSON.stringify(validate(builder.config))) return;
+      if (!json.success || !result?.ok || typeof result.html !== 'string') {
+        const error = new Error(); error.previewKey = previewErrorKey(result?.code); throw error;
+      }
+      if (controller.signal.aborted || previewDialog !== currentDialog || snapshot !== JSON.stringify(validate(builder.config)) || currentPresentation() !== presentation) return;
+      if ((presentation === 'email' && result.presentation !== 'email') || (result.presentation && result.presentation !== presentation)) throw new Error();
       const doc = document.implementation.createHTMLDocument(labels.preview);
       doc.documentElement.className = 'sources-preview-document';
       doc.body.className = 'sources-preview-surface';
@@ -113,15 +130,18 @@ export function mountSourcesField(host) {
         const style = doc.createElement('link'); style.rel = 'stylesheet'; style.href = link.href; doc.head.append(style);
       }
       const style = doc.createElement('style'); style.textContent = 'body{padding:20px;margin:0;overflow-wrap:anywhere}'; doc.head.append(style);
-      appendPreviewStyles(doc, result.styles, document.baseURI);
-      doc.body.innerHTML = result.html;
+      if (presentation === 'site') appendPreviewStyles(doc, result.styles, document.baseURI);
+      doc.body.append(readOnlyPreviewBlock(doc, { raw: serialize(JSON.parse(snapshot)), config: JSON.parse(snapshot) }, 'render', result.html, settings));
       if (!result.html.trim()) doc.body.textContent = labels.empty;
+      frame.addEventListener('load', () => {
+        if (previewFrame === frame && frame.contentDocument) mountNestedPreviews(frame.contentDocument, settings);
+      });
       frame.srcdoc = '<!doctype html>' + doc.documentElement.outerHTML;
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        closePreview(); fail(options().i18n?.previewFailed || labels.invalid);
+      if (error.name !== 'AbortError' && !controller?.signal.aborted) {
+        closePreview(); fail(options().i18n?.[error.previewKey || 'previewFailed'] || labels.invalid);
       }
-    } finally { preview.disabled = !builder?.config.blocks.length || !!builder?.pending; }
+    } finally { if (!controller || request === controller) preview.disabled = !builder?.config.blocks.length || !!builder?.pending; }
   };
   preview.addEventListener('click', showPreview);
   const beforeSubmit = event => {
@@ -130,8 +150,9 @@ export function mountSourcesField(host) {
     if (/cancel$/.test(task)) return;
     if (builder?.pending) { event.preventDefault(); fail(labels.pending); return; }
     if (builder) {
+      if (!builder.validateInputs()) { event.preventDefault(); return; }
       try {
-        write(builder.config);
+        write(builder.config, true);
         if (required && !builder.config.blocks.length) throw new Error();
         if (required && !input.value.trim()) {
           input.value = JSON.stringify(validate(builder.config));
@@ -144,8 +165,17 @@ export function mountSourcesField(host) {
   const reset = () => setTimeout(mount, 0);
   parent?.addEventListener('reset', reset);
   mount();
-  const instance = { get builder() { return builder; }, showPreview, destroy() {
+  const instance = { get builder() { return builder; }, showPreview,
+    get presentation() { return currentPresentation(); },
+    configurePreviewContext(context) {
+      const presentation = context.presentation == null ? null : validatePresentation(context.presentation);
+      stopContext(); contextEditor = context.editorId || null; explicitPresentation = presentation;
+      stopContext = observeEditorPresentation(contextEditor, contextChanged); contextChanged();
+    },
+    setPresentation(presentation) { explicitPresentation = validatePresentation(presentation); contextChanged(); },
+    destroy() {
     destroyed = true;
+    stopContext();
     closePreview(); builder?.destroy(); input.hidden = false; input.required = required;
     input.removeEventListener('change', inputChanged); parent?.removeEventListener('submit', beforeSubmit);
     parent?.removeEventListener('joomla:before-submit', beforeSubmit); parent?.removeEventListener('reset', reset);

@@ -2,12 +2,12 @@
 <extension type="plugin" group="editors-xtd" method="upgrade" version="4.0">
     <name>PLG_EDITORSXTD_SOURCESBUTTON</name>
     <author>SuperSoft — Kontarinis Andreas</author>
-    <creationDate>2026-05-02</creationDate>
+    <creationDate>2026-10-30</creationDate>
     <copyright>© 2026 SuperSoft — Kontarinis Andreas</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
     <authorEmail></authorEmail>
     <authorUrl></authorUrl>
-    <version>4.0.0</version>
+    <version>4.4.3</version>
     <description>PLG_EDITORSXTD_SOURCESBUTTON_XML_DESCRIPTION</description>
 
     <namespace path="src">SuperSoft\Plugin\EditorsXtd\SourcesButton</namespace>

@@ -51,9 +51,11 @@ final class InlineConfig
             if ($type === 'articles' ? $tags || $categories : $articles) { throw new \InvalidArgumentException('Mixed Sources blocks are not supported.'); }
             if ($type !== 'categories' && ($filters['groupByCategory'] ?? false)) { throw new \InvalidArgumentException('Category grouping requires a category block.'); }
             if (array_key_exists('name', $block)) { self::title($block['name']); }
+            $normalizedFilters = ['tags' => $tags, 'categories' => $categories, 'order' => $order];
+            if ($type !== 'articles') { $normalizedFilters['limit'] = self::limit($filters['limit'] ?? 0); }
             $result['blocks'][] = ['type' => $type, 'title' => self::title(($block['title'] ?? '') !== '' ? $block['title'] : ($block['name'] ?? '')),
                 'articles' => $articles,
-                'filters' => ['tags' => $tags, 'categories' => $categories, 'order' => $order, 'limit' => self::limit($filters['limit'] ?? 0)],
+                'filters' => $normalizedFilters,
                 'presentation' => self::presentation($block['presentation'] ?? (object) [], false)];
         }
         return $result;

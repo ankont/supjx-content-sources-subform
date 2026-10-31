@@ -41,11 +41,11 @@ export function validate(value) {
     if (block.type !== 'categories' && filters.groupByCategory === true) throw new Error('Category grouping requires a category block.');
     if (block.name !== undefined) title(block.name);
     return { type: block.type, title: title(block.title ?? '') || title(block.name ?? ''), articles, filters: {
-      tags, categories, order: filters.order ?? 'published-desc', limit: limit(filters.limit ?? 0),
+      tags, categories, order: filters.order ?? 'published-desc', ...(block.type === 'articles' ? {} : { limit: limit(filters.limit ?? 0) }),
     }, presentation: presentation(block.presentation ?? {}, false) };
   }) };
 }
-export const newBlock = (type = 'articles') => ({ type, title: '', articles: [], filters: { tags: [], categories: [], order: 'published-desc', limit: type === 'articles' ? 0 : 16 }, presentation: { layout: 'cards' } });
+export const newBlock = (type = 'articles') => ({ type, title: '', articles: [], filters: { tags: [], categories: [], order: 'published-desc', ...(type === 'articles' ? {} : { limit: 16 }) }, presentation: { layout: 'cards' } });
 export const newContainer = () => ({ version: 2, display: 'separate', ordering: { mode: 'blocks', order: 'published-desc' }, presentation: { title: '', layout: 'cards', limit: 18 }, blocks: [newBlock()] });
 export function serialize(value) {
   // Normal JSON escapes only for HTML-sensitive text; no opaque encoding or editor markup in storage.

@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
+test('actual SmartBrowser unavailable field exposes exact stored values and translated dynamic global labels', context => {
+  const result=spawnSync('php',['tests/php-unavailable-field.php'],{encoding:'utf8'});
+  if(result.status===3){context.skip('Local Joomla libraries required');return;}
+  assert.equal(result.status,0,result.stdout+result.stderr);
+});
+
 test('Sources uses actual shared output, generic/override layouts and once-only presentation for all modes', () => {
   const result = spawnSync('php', ['tests/php-shared-output.php'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);

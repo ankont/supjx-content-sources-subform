@@ -34,6 +34,39 @@ test('embedded Builder writes the existing field synchronously, without nested f
   instance.destroy(); assert.equal(input.hidden, false);
 });
 
+test('embedded numeric validation reveals collapsed blocks and keeps outer form validation enabled',async()=>{
+  const config=newContainer();config.blocks=[newBlock('categories')];
+  const {instance,form,dom}=await fixture(JSON.stringify(config));
+  const builder=instance.builder,record=builder.records.get(builder.config.blocks[0]);
+  const input=record.limitField.querySelector('input');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));
+  builder.setExpanded(record,false);
+  const submit=new dom.window.Event('submit',{bubbles:true,cancelable:true});form.dispatchEvent(submit);
+  assert.equal(submit.defaultPrevented,true);assert.equal(record.content.hidden,false);assert.equal(form.noValidate,false);
+  input.value='0';input.dispatchEvent(new Event('input',{bubbles:true}));
+  const valid=new dom.window.Event('submit',{bubbles:true,cancelable:true});form.dispatchEvent(valid);
+  assert.equal(valid.defaultPrevented,false);assert.equal(instance.builder.config.blocks[0].filters.limit,0);
+  instance.destroy();
+});
+
+test('saving an untouched embedded field clears obsolete manual limits',async()=>{
+  const config=newContainer();config.blocks[0].filters.limit=16;
+  const {instance,input,form,dom}=await fixture(JSON.stringify(config));
+  const submit=new dom.window.Event('submit',{bubbles:true,cancelable:true});form.dispatchEvent(submit);
+  assert.equal(submit.defaultPrevented,false);assert.equal(Object.hasOwn(JSON.parse(input.value).blocks[0].filters,'limit'),false);
+  instance.destroy();
+});
+
+test('embedded email preview reports the email dependency rather than blaming Content Sources',async()=>{
+  const {instance,host,dom}=await fixture();const previous=global.fetch;
+  dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};
+  dom.window.HTMLDialogElement.prototype.close=function(){this.open=false};
+  window.Joomla.getOptions=()=>({ajaxUrl:'/preview',csrfToken:'csrf',i18n:{previewEmailDisabled:'Email provider disabled'}});
+  instance.setPresentation('email');
+  global.fetch=async()=>({ok:true,json:async()=>({success:true,data:[{ok:false,html:'',code:'email_plugin_disabled'}]})});
+  try{await instance.showPreview();assert.ok(host.textContent.includes('Email provider disabled'));}
+  finally{global.fetch=previous;instance.destroy();}
+});
+
 test('external native changes remount from the same JSON, malformed data stays accessible', async () => {
   const config = newContainer(); config.blocks[0].articles = [4, 11]; config.blocks.push(newBlock('categories'));
   const { input, instance, host } = await fixture(JSON.stringify(config));
@@ -108,6 +141,29 @@ test('field preview refreshes Usage drafts and ignores stale server HTML, retain
     const html = document.querySelector('.sources-field-preview iframe').srcdoc;
     assert.match(html, /Newest/); assert.doesNotMatch(html, /Stale/);
     assert.match(html, /data-sb-image-presentation="server"/);
+    assert.match(html, /sources-editor-token__header/); assert.match(html, /data-sources-mode="render"/);
+    assert.match(html, /Changed draft/); assert.match(html, /sources-editor-token__summary/);
     assert.equal(host.querySelector('.sources-field-value').value.includes('Newest'), false);
+  } finally { instance.destroy(); global.fetch = originalFetch; dom.window.close(); }
+});
+
+test('Builder preview propagates email context and rejects old site responses even when transport ignores abort', async () => {
+  const config = newContainer(); config.blocks[0].articles = [4];
+  const { instance, host, dom } = await fixture(JSON.stringify(config));
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  const originalFetch = global.fetch, pending = [];
+  global.fetch = (url, options) => new Promise(resolve => pending.push({ resolve, options }));
+  try {
+    const old = instance.showPreview(); instance.setPresentation('email');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(pending[0].options.body.get('presentation'), 'site'); assert.equal(pending[0].options.signal.aborted, true);
+    assert.equal(pending[1].options.body.get('presentation'), 'email');
+    pending[1].resolve({ ok: true, json: async () => ({ success: true, data: [{ ok: true, presentation: 'email', html: '<table width="100%" style="border-collapse:collapse"><tr><td>Email preview</td></tr></table>' }] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    pending[0].resolve({ ok: true, json: async () => ({ success: true, data: [{ ok: true, presentation: 'site', html: 'Stale site' }] }) }); await old;
+    const html = document.querySelector('.sources-field-preview iframe').srcdoc;
+    assert.match(html, /sources-email-preview/); assert.match(html, /Email preview/); assert.doesNotMatch(html, /Stale site/);
+    assert.equal(host.querySelector('.sources-field-value').value, JSON.stringify(config));
   } finally { instance.destroy(); global.fetch = originalFetch; dom.window.close(); }
 });
