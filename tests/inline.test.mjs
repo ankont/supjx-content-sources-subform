@@ -95,6 +95,32 @@ function setup(compact=false) {
   }};
   return {instances,picks,dom};
 }
+
+test('dynamic block introduction toggle and limit share the first advanced row without changing their values', async () => {
+  for (const type of ['articles', 'categories', 'tags']) {
+    setup(); const config = newContainer(); config.blocks = [newBlock(type)];
+    const builder = new SourcesBuilder(config), complete = builder.open();
+    const input = builder.dialog.querySelector('.sources-intro-option');
+    if (type === 'articles') assert.equal(input, null);
+    else {
+      assert.equal(input.type, 'button');
+      assert.equal(input.getAttribute('aria-pressed'), 'false');
+      const record = builder.records.get(builder.config.blocks[0]);
+      assert.ok(record.advanced.querySelector('.sources-filter-primary').contains(input));
+      assert.ok(input.closest('.sources-filter-primary').contains(record.limitField));
+      assert.equal(record.settings.contains(record.limitField), false);
+      assert.equal(record.advanced.querySelector('.sources-filter-primary').nextElementSibling, record.filters);
+      input.click();
+      assert.equal(validate(builder.config).blocks[0].showIntro, true);
+      builder.config.display = 'merged'; builder.renderBlocks();
+      assert.equal(builder.dialog.querySelector('.sources-intro-option').getAttribute('aria-pressed'), 'true');
+      const current = builder.dialog.querySelector('.sources-intro-option');
+      current.click();
+      assert.equal('showIntro' in validate(builder.config).blocks[0], false);
+    }
+    builder.finish(null); await complete;
+  }
+});
 test('three add actions create independent typed collections and node pickers', async () => {
   const {instances,picks}=setup();const builder=new SourcesBuilder(newContainer());const complete=builder.open();
   assert.equal(builder.addButtons.length,3);
@@ -170,6 +196,36 @@ test('block clipboard copies validated JSON and pastes at the end, including int
     assert.notEqual(builder.config.blocks[0].filters,builder.config.blocks[1].filters);
   }
   builder.finish(null);await complete;
+});
+
+test('filter disclosure remembers the last user choice independently of block expansion and validation',async()=>{
+  setup(); const key='supjx.sources.builder.filters.expanded',config=newContainer();config.blocks=[newBlock('tags')];
+  let builder=new SourcesBuilder(config),done=builder.open(),record=builder.records.values().next().value;
+  const before=serialize(builder.config);
+  assert.equal(record.advanced.open,true);
+  record.advanced.querySelector('summary').click();
+  assert.equal(record.advanced.open,false);assert.equal(window.localStorage.getItem(key),'collapsed');
+  builder.expandAll.click();assert.equal(window.localStorage.getItem(key),'collapsed');
+  builder.finish(null);await done;
+  const saved=window.localStorage.getItem(key);setup();window.localStorage.setItem(key,saved);
+  builder=new SourcesBuilder(config,true,{onChange(){}});builder.mount(document.body);record=builder.records.values().next().value;
+  assert.equal(record.advanced.open,false);assert.equal(record.advanced.querySelector('summary').getAttribute('aria-expanded'),'false');
+  record.limitField.querySelector('input').value='';
+  assert.equal(builder.validateInputs(),false);assert.equal(record.advanced.open,true);
+  assert.equal(window.localStorage.getItem(key),'collapsed');
+  record.advanced.querySelector('summary').click();record.advanced.querySelector('summary').click();
+  assert.equal(window.localStorage.getItem(key),'expanded');assert.equal(serialize(builder.config),before);builder.destroy();
+  builder=new SourcesBuilder(config);done=builder.open();assert.equal(builder.records.values().next().value.advanced.open,true);
+  builder.finish(null);await done;
+});
+
+test('filter disclosure keeps a page-local preference when storage reads or writes fail',async()=>{
+  for(const readFails of [true,false]){
+    setup();Object.defineProperty(window,'localStorage',{configurable:true,get(){if(readFails)throw new Error('Blocked');return {getItem(){return 'expanded'},setItem(){throw new Error('Quota')}}}});
+    const config=newContainer();config.blocks=[newBlock('categories')];
+    let builder=new SourcesBuilder(config),done=builder.open();builder.records.values().next().value.advanced.querySelector('summary').click();builder.finish(null);await done;
+    builder=new SourcesBuilder(config);done=builder.open();assert.equal(builder.records.values().next().value.advanced.open,false);builder.finish(null);await done;
+  }
 });
 
 test('only the last All command persists expansion across Builder instances and reloads',async()=>{

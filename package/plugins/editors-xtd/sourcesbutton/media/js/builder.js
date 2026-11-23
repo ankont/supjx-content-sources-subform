@@ -19,6 +19,18 @@ function rememberExpansion(expanded) {
   try { window.localStorage.setItem(expansionPreferenceKey, expanded ? 'expanded' : 'collapsed'); }
   catch { /* Browser preferences are optional; the current page still remembers. */ }
 }
+const filterPreferenceKey = 'supjx.sources.builder.filters.expanded';
+const pageFilterPreferences = new WeakMap();
+function preferredFilters() {
+  if (pageFilterPreferences.has(window)) return pageFilterPreferences.get(window);
+  try { return window.localStorage.getItem(filterPreferenceKey) !== 'collapsed'; }
+  catch { return true; }
+}
+function rememberFilters(expanded) {
+  pageFilterPreferences.set(window, expanded);
+  try { window.localStorage.setItem(filterPreferenceKey, expanded ? 'expanded' : 'collapsed'); }
+  catch { /* Keep the preference for this page when storage is unavailable. */ }
+}
 function el(tag, className = '', text = '') {
   const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
 }
@@ -252,6 +264,7 @@ export class SourcesBuilder {
         record.limitField.hidden = this.config.display === 'merged';
         record.limitField.querySelector('input').disabled = this.config.display === 'merged';
       }
+      if (record.groupButton) record.groupButton.hidden = this.config.display === 'merged';
       record.settings.classList.toggle('sources-settings-merged', this.config.display === 'merged');
       record.orderField?.querySelector('select').toggleAttribute('disabled', this.commonOrder());
       if (record.orderField) record.orderField.hidden = this.commonOrder();
@@ -376,13 +389,19 @@ export class SourcesBuilder {
     const settings = el('div', 'sources-settings sources-block-settings');
     settings.append(captionField, display);
     const limitField = block.type === 'articles' ? null : this.field(t('limit'), block.filters, 'limit', true);
-    if (limitField) settings.append(limitField);
-    else settings.classList.add('sources-settings-manual');
+    settings.classList.add('sources-settings-manual');
     const collectionHost = el('div', 'sources-collection sb-selection-field');
-    const advanced = el('details', 'sources-advanced'); advanced.open = true; advanced.hidden = block.type === 'articles';
-    const filterSummary = el('summary'); filterSummary.setAttribute('aria-expanded', 'true');
-    const filterIcon = el('span', 'fas fa-chevron-down'); filterIcon.setAttribute('aria-hidden', 'true');
+    const advanced = el('details', 'sources-advanced'); advanced.open = preferredFilters(); advanced.hidden = block.type === 'articles';
+    const filterSummary = el('summary'); filterSummary.setAttribute('aria-expanded', String(advanced.open));
+    const filterIcon = el('span', 'fas fa-' + (advanced.open ? 'chevron-down' : 'chevron-right')); filterIcon.setAttribute('aria-hidden', 'true');
     filterSummary.append(filterIcon, document.createTextNode(t('filters'))); advanced.append(filterSummary);
+    filterSummary.addEventListener('click', event => {
+      event.preventDefault();
+      advanced.open = !advanced.open;
+      rememberFilters(advanced.open);
+      filterIcon.className = 'fas fa-' + (advanced.open ? 'chevron-down' : 'chevron-right');
+      filterSummary.setAttribute('aria-expanded', String(advanced.open));
+    });
     advanced.addEventListener('toggle', () => {
       filterIcon.className = 'fas fa-' + (advanced.open ? 'chevron-down' : 'chevron-right');
       filterSummary.setAttribute('aria-expanded', String(advanced.open));
@@ -391,6 +410,23 @@ export class SourcesBuilder {
     const record = { block, card, title, summary, toggle, content, up, down, duplicate, remove, collectionHost, display, captionField, limitField, settings, filters, advanced,
       filterFields: {}, titleInput: captionField.querySelector('input') };
     if (block.type !== 'articles') {
+      const introButton = button(t('showIntro'), 'align-left', () => {
+        if (block.showIntro) delete block.showIntro; else block.showIntro = true;
+        introButton.setAttribute('aria-pressed', String(block.showIntro === true));
+        this.notifyChange();
+      });
+      introButton.classList.add('sources-intro-option');
+      introButton.append(document.createTextNode(t('showIntro')));
+      introButton.setAttribute('aria-pressed', String(block.showIntro === true));
+      const primaryFilters = el('div', 'sources-filter-primary');
+      const groupButton = button(t('grouped'), 'layer-group', () => {
+        if (block.grouped) delete block.grouped; else block.grouped = true;
+        groupButton.setAttribute('aria-pressed', String(block.grouped === true)); this.notifyChange();
+      });
+      groupButton.classList.add('sources-intro-option', 'sources-group-option'); groupButton.append(document.createTextNode(t('grouped')));
+      groupButton.setAttribute('aria-pressed', String(block.grouped === true)); record.groupButton = groupButton;
+      const introActions = el('div', 'sources-intro-actions'); introActions.append(introButton, groupButton);
+      primaryFilters.append(introActions, limitField); advanced.append(primaryFilters);
       const other = block.type === 'categories' ? 'tags' : 'categories';
       filters.append(this.filterField(block, other, record));
       record.orderField = this.selectField(t('order'), block.filters, 'order', ORDERS);
@@ -401,7 +437,8 @@ export class SourcesBuilder {
       }
     }
     advanced.append(filters);
-    content.append(settings, el('h3', 'sources-section-label', t(block.type)), collectionHost, advanced);
+    content.append(settings, el('h3', 'sources-section-label', t(block.type)), collectionHost);
+    content.append(advanced);
     card.append(heading, content);
     this.records.set(block, record); this.list.append(card);
     if (this.initializingBlocks) this.setExpanded(record, this.initialExpansion);
@@ -418,6 +455,8 @@ export class SourcesBuilder {
     record.orderingEnabled = this.canOrder(block);
     try {
       record.collection = window.SmartBrowser.mountCollection(record.collectionHost, {
+        consumer: 'sources', usageCapabilities: options().usageCapabilities || [],
+        translate: key => options().usageLabels?.[key] || window.Joomla?.Text?._(key, key) || key,
         adapter: block.type, referenceItems: true, allowedAdapters: [block.type], homogeneous: true, multiple: true,
         pickerUrl: window.Joomla?.getOptions('com_smartbrowser.picker', {})?.url,
         allowedResourceTypes: [prefix(block.type)], selectionTarget: block.type === 'articles' ? 'item' : 'node',
@@ -507,6 +546,8 @@ export class SourcesBuilder {
     this.notifyChange();
     try {
       const result = await window.SmartBrowserPicker.open({ adapter, allowedAdapters: [adapter],
+        consumer: 'sources', usageCapabilities: options().usageCapabilities || [],
+        translate: key => options().usageLabels?.[key] || window.Joomla?.Text?._(key, key) || key,
         resultFormat: 'collection', multiple: true, homogeneous: true, selectionTarget: key === 'articles' ? 'item' : 'node',
         allowedResourceTypes: [prefix],
         initialCollection: references(current, key), selectionUseData: 'editable', selectionProfile: usageProfile(key), maxSelections: 500,

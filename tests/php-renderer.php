@@ -87,7 +87,8 @@ namespace Joomla\CMS\Layout {
         public function getDefaultIncludePaths() { return []; }
         public function setIncludePaths($paths) { return $this; }
         public function render($displayData) {
-            if (self::$onRender) { (self::$onRender)($displayData); }
+            if ($this->id === 'sources.group') { return $displayData['introductions_html'] . $displayData['results_html']; }
+            if (self::$onRender) { $override = (self::$onRender)($displayData, $this->id); if (is_string($override)) { return $override; } }
             ob_start();
             include dirname(__DIR__) . '/package/plugins/content/sources/layouts/sources/item.php';
             return ob_get_clean();
@@ -103,7 +104,7 @@ namespace Joomla\CMS\Layout {
     }
 }
 namespace Joomla\CMS\HTML {
-    class HTMLHelper { public static function _($name, $text, ...$args) { return $text; } }
+    class HTMLHelper { public static array $calls = []; public static function _($name, $text, ...$args) { self::$calls[] = [$name, $text, $args]; return $text; } }
 }
 namespace {
     use Joomla\CMS\Factory;

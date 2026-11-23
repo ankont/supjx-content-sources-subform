@@ -69,6 +69,7 @@ export function mountSourcesField(host, previewContext = null) {
         integrationFailed = true; input.hidden = false; fallback.hidden = false; fallback.open = false;
         fail(labels.invalid);
       } });
+      if (!input.value.trim()) builder.config.blocks = [];
       builder.mount(surface);
       if (!input.value.trim()) lastDraft = JSON.stringify(builder.config);
       input.hidden = !integrationFailed;

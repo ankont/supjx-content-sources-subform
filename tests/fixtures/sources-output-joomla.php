@@ -5,6 +5,7 @@ namespace Joomla\CMS {
 namespace Joomla\CMS\Log {
     final class Log { const WARNING = 4; public static function add(...$args) {} }
 }
+namespace Joomla\CMS\Uri { final class Uri { public static function root() { return 'https://example.test/'; } } }
 namespace Joomla\CMS\Plugin {
     final class PluginHelper { public static function importPlugin(...$args) {} }
 }
@@ -31,8 +32,8 @@ namespace Joomla\CMS\Layout {
         public function render($displayData) {
             if ($this->id === 'sources.item') self::$itemData[] = $displayData;
             if (isset(self::$overrides[$this->id])) return (self::$overrides[$this->id])($displayData);
-            $file = $this->id === 'sources.item'
-                ? end($this->paths) . '/sources/item.php'
+            $file = str_starts_with($this->id, 'sources.')
+                ? end($this->paths) . '/' . str_replace('.', '/', $this->id) . '.php'
                 : dirname(__DIR__, 3) . '/pkg_smartbrowser/package/component/site/layouts/smartbrowser/resource.php';
             ob_start(); require $file; return ob_get_clean();
         }

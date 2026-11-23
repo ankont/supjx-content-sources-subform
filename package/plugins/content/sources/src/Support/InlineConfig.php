@@ -37,9 +37,11 @@ final class InlineConfig
             'ordering' => ['mode' => $ordering['mode'] ?? 'blocks', 'order' => $ordering['order'] ?? 'published-desc'],
             'presentation' => self::presentation($container['presentation'] ?? (object) []), 'blocks' => []];
         foreach ($blocks as $block) {
-            $block = self::object($block, ['type', 'name', 'title', 'articles', 'filters', 'presentation']);
+            $block = self::object($block, ['type', 'name', 'title', 'articles', 'filters', 'presentation', 'showIntro', 'grouped']);
             $type = $block['type'] ?? null;
             if (!in_array($type, ['articles', 'categories', 'tags'], true)) { throw new \InvalidArgumentException('Invalid Sources block type.'); }
+            if ((array_key_exists('showIntro', $block) && !is_bool($block['showIntro'])) || ($type === 'articles' && !empty($block['showIntro']))) { throw new \InvalidArgumentException('Invalid Sources introduction.'); }
+            if ((array_key_exists('grouped', $block) && !is_bool($block['grouped'])) || ($type === 'articles' && !empty($block['grouped']))) { throw new \InvalidArgumentException('Invalid Sources grouping.'); }
             $filters = self::object($block['filters'] ?? (object) [], ['tags', 'categories', 'order', 'limit', 'groupByCategory']);
             $order = $filters['order'] ?? 'published-desc';
             if (!in_array($order, self::ORDERS, true) || !is_bool($filters['groupByCategory'] ?? false)) {
@@ -56,7 +58,8 @@ final class InlineConfig
             $result['blocks'][] = ['type' => $type, 'title' => self::title(($block['title'] ?? '') !== '' ? $block['title'] : ($block['name'] ?? '')),
                 'articles' => $articles,
                 'filters' => $normalizedFilters,
-                'presentation' => self::presentation($block['presentation'] ?? (object) [], false)];
+                'presentation' => self::presentation($block['presentation'] ?? (object) [], false),
+                ...(!empty($block['showIntro']) ? ['showIntro' => true] : []), ...(!empty($block['grouped']) ? ['grouped'=>true] : [])];
         }
         return $result;
     }

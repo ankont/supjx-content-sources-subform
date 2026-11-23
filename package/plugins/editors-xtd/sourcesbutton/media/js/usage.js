@@ -1,4 +1,5 @@
 export const usageProfile = key => ({
+  ...(key === 'articles' ? {} : Object.fromEntries(['introLayout','introElements','introTitle','introDescription','introClass'].map(name => ['ext.sources.' + name, name === 'introLayout' || name === 'introElements' ? {required:true} : {}]))),
   ...(key === 'articles' ? { 'article.displayedName': {} } : {}),
   'visual.thumbnailOverride': {},
   'visual.iconOverride': { presentation: 'secondary' },
@@ -17,6 +18,14 @@ export function validateUsage(value, adapter) {
     || new TextEncoder().encode(JSON.stringify(value)).length > 65536) throw new Error('Invalid Sources usage.');
   const result = {};
   for (const [key, data] of Object.entries(value)) {
+    if (key.startsWith('ext.sources.')) {
+      const name = key.slice(12), limits = {introLayout:2000,introElements:2000,introTitle:2000,introDescription:10000,introClass:255};
+      if (adapter === 'articles' || !Object.hasOwn(limits,name)) throw new Error('Invalid Sources introduction usage.');
+      if (data !== null && (typeof data !== 'string' || [...data].length > limits[name]
+        || name === 'introLayout' && !['default','simple','heading','card','collapsible'].includes(data)
+        || name === 'introElements' && !['both','title','description','none'].includes(data)
+        || name === 'introClass' && data !== '' && !/^[a-zA-Z_][a-zA-Z0-9_-]*(?: [a-zA-Z_][a-zA-Z0-9_-]*)*$/.test(data))) throw new Error('Invalid Sources introduction usage value.');
+    }
     if (!Object.hasOwn(usageProfile(adapter), key) && !/^ext\.[a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*)*$/.test(key)) throw new Error('Unsupported Sources usage.');
     if (data === null) { if (key.startsWith('ext.')) result[key] = null; continue; }
     if (key === 'article.displayedName' && (typeof data !== 'string' || [...data].length > 255)) throw new Error('Invalid Sources displayed name.');

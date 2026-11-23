@@ -1,5 +1,6 @@
 <?php
 namespace SuperSoft\Plugin\Content\Sources\Support;
+require_once __DIR__ . '/Introduction.php';
 
 use Joomla\CMS\Factory;
 use Joomla\CMS\Plugin\PluginHelper;
@@ -16,6 +17,7 @@ final class EmailRenderer
     private int $contentsLevels;
     private mixed $showUnavailable;
     private array $active = [];
+    private int $introductionDepth = 0;
     private InlineRenderer $resolver;
     private array $limits;
     private string $root;
@@ -67,7 +69,7 @@ final class EmailRenderer
     private function container(array $config, int $depth): string
     {
         // Retain the shared selector's per-container bounds, not a cumulative email item cap.
-        $blocks = $this->resolver->resolveBlocks($config, 'email', 2000);
+        $blocks = $this->resolver->resolveBlocks($config, 'email', 2000, $depth === 1 && $this->introductionDepth === 0);
         $html = '';
         foreach ($blocks as $block) {
             $models = [];
@@ -103,7 +105,40 @@ final class EmailRenderer
                 finally { if (!$cycle) { unset($this->active[$id]); } }
             }
             if (!$models) { continue; }
-            $html .= $this->layout('sources.email.block', ['title' => $block['title'], 'layout' => $block['layout'], 'items' => $models]);
+            $introHtml = ''; $emailIntroductions = [];
+            foreach ($block['introductions'] ?? [] as $intro) {
+                $this->introductionDepth++;
+                try {
+                    $model = Introduction::model($intro['entity'], $intro['type'], $this->root);
+                    $presentation = $intro['presentation'] ?? IntroUsage::presentation([]);
+                    $selected = $this->resolver->prepareIntroduction($intro);
+                    if ($selected !== null && !empty($selected['unavailable'])) { continue; }
+                    $model['icon'] = null;
+                    if ($selected !== null) {
+                        $selected['visualPresentation'] ??= 'both';
+                        $visual = SelectionOutputRenderer::displayData($selected);
+                        $model['image'] = EmailHtml::url($visual['imageAddress'] ?? '', $this->root, true);
+                        $model['icon'] = $visual['icon'];
+                    }
+                    $model['description'] = in_array($presentation['elements'], ['both','description'], true)
+                        ? (!empty($intro['entity']->sources_description_plain) ? $model['description'] : $this->supportedContent($model['description'], $depth)) : '';
+                    $emailIntroductions[] = ['entity'=>$model,'type'=>$intro['type'],'criteria'=>$intro['criteria'],
+                        'presentation'=>$presentation,'selected'=>$selected];
+                    $introHtml .= $this->layout('sources.email.' . ($intro['type'] === 'tags' ? 'tag' : 'category') . '-intro', [
+                        'entity' => $model, 'type' => $intro['type'], 'purpose' => $this->document->get('purpose') === 'preview' ? 'preview' : 'output',
+                        'layout' => $block['layout'], 'display' => $config['display'], 'criteria' => $intro['criteria'],
+                        'public_only' => true, 'depth' => $depth, 'parent_article_id' => 0,
+                        'presentation'=>$presentation, 'selected'=>$selected,
+                    ]);
+                } finally { $this->introductionDepth--; }
+            }
+            $results = $this->layout('sources.email.block', ['title' => $block['title'], 'layout' => $block['layout'], 'items' => $models]);
+            $html .= $introHtml !== '' || isset($block['group']) ? $this->layout('sources.email.group', [
+                'introductions_html'=>$introHtml, 'results_html'=>$results, 'introductions'=>$emailIntroductions,
+                'group'=>$block['group'] ?? null, 'layout'=>$block['layout'], 'display'=>$config['display'],
+                'purpose'=>$this->document->get('purpose') === 'preview' ? 'preview' : 'output', 'public_only'=>true,
+                'collapsible'=>(bool) array_filter($emailIntroductions, static fn($intro)=>$intro['presentation']['layout'] === 'collapsible'),
+            ]) : $results;
             $this->bytes($html);
         }
         return $html;

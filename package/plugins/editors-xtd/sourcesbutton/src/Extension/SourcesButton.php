@@ -76,7 +76,7 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
                 \Joomla\CMS\Log\Log::add('Sources SmartBrowser: ' . $error->getMessage(), \Joomla\CMS\Log\Log::WARNING, 'sources');
             }
         }
-        $keys = ['builder', 'insert', 'update', 'cancel', 'addBlock', 'addSources', 'title', 'sources', 'presentation', 'filters',
+        $keys = ['builder', 'insert', 'update', 'cancel', 'addBlock', 'addSources', 'title', 'sources', 'presentation', 'filters', 'showIntro',
             'tags', 'categories', 'limit', 'layout', 'separate', 'merged', 'display', 'expandAll', 'collapseAll', 'duplicate', 'copyBlock', 'pasteBlock', 'clipboardUnavailable', 'clipboardInvalid', 'delete', 'up', 'down', 'actions',
             'untitled', 'edit', 'settings', 'none', 'placeholder', 'list_manual', 'list_full', 'render', 'unavailable', 'invalid', 'conflict',
             'cards', 'details', 'list', 'icons', 'contents', 'advancedTags', 'advancedCategories', 'maximize', 'restore',
@@ -84,10 +84,19 @@ final class SourcesButton extends CMSPlugin implements SubscriberInterface
             'published-desc', 'published-asc', 'created-desc', 'created-asc', 'title-asc', 'title-desc', 'ordering-asc',
             'previewPermission', 'previewResponse', 'previewEmpty', 'previewNetwork', 'previewFailed', 'previewBudget', 'previewInvalid', 'previewDisabled', 'previewBlocks', 'previewSelectedArticles'];
         $i18n = [];
-        $keys = [...$keys, 'validationLimit', 'validationField'];
+        require_once dirname(__DIR__, 4) . '/content/sources/src/Support/IntroUsage.php';
+        \SuperSoft\Plugin\Content\Sources\Support\IntroUsage::register();
+        $usageCapabilities = \SuperSoft\Plugin\Content\Sources\Support\IntroUsage::definitions();
+        $app->getLanguage()->load('plg_content_sources', JPATH_ADMINISTRATOR);
+        $usageLabels = [];
+        foreach ($usageCapabilities as $definition) {
+            foreach ([$definition['label'], ...array_column($definition['options'] ?? [], 'label')] as $label) { $usageLabels[$label] = Text::_($label); }
+        }
+        $keys = [...$keys, 'validationLimit', 'validationField', 'grouped'];
         foreach (['Content', 'Email'] as $dependency) foreach (['Missing','Disabled','Restricted','PublicRequired','Unavailable','Incomplete'] as $status) { $keys[] = 'preview' . $dependency . $status; }
         foreach ($keys as $key) { $i18n[$key] = Text::_('PLG_EDITORSXTD_SOURCESBUTTON_INLINE_' . strtoupper(str_replace('-', '_', $key))); }
         $document->addScriptOptions('plg_editorsxtd_sourcesbutton.inline', [
+            'usageCapabilities'=>$usageCapabilities, 'usageLabels'=>$usageLabels,
             'previewMode' => $this->params->get('editor_preview_mode', 'placeholder'),
             'badgeLabel' => $this->params->get('badge_label', '') ?: 'Sources',
             'ajaxUrl' => Uri::base() . 'index.php?option=com_ajax&plugin=sourcesbutton&group=editors-xtd&format=json',

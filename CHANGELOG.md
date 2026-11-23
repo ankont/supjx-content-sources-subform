@@ -1,5 +1,66 @@
 # Changelog
 
+## 5.0.2 - 2026-11-17
+
+- Give each Sources-specific SmartBrowser Usage field a meaningful native icon
+  for layout, visible elements, title, description and CSS class.
+
+## 5.0.1 - 2026-11-16
+
+- Fix Sources Usage legacy loading when Joomla has not injected the application:
+  use the current Factory application as fallback in both lifecycle handlers.
+- Sources Usage is 1.0.1; add regression coverage for the null application path.
+
+## 5.0.0 - 2026-11-16
+
+- Integrate SmartBrowser 6.1.0 consumer-scoped capabilities for per-category/tag
+  introduction layouts, title/description visibility, overrides and CSS classes.
+- Register trusted Sources definitions on API requests through the packaged
+  System - SuperSoftJx - Sources Usage plugin (1.0.0); no SmartBrowser edits.
+- Add opt-in grouped category/tag lists in Separate mode; retain ungrouped AND
+  tag semantics and common Merged output, with ordered, first-occurrence intros.
+- Add sources.group and sources.email.group override boundaries pairing intros
+  with results. Generic site disclosure folds results; email keeps results visible.
+- Apply native/overridden visuals through the shared image pipeline only in the
+  generic layout, without forced presentation around template overrides.
+- Preserve existing version-2 configurations and first-level introduction policy.
+  Sources Email provider is 1.3.0.
+
+## 4.5.3 - 2026-11-16
+
+- Start empty Sources custom fields with no automatic Articles block. Preserve
+  saved blocks, explicit add actions and the editor-button dialog default.
+
+## 4.5.2 - 2026-11-16
+
+- Remember the last manual Filters / advanced disclosure choice across Builder
+  openings and reloads, independently of Expand All and stored Sources JSON.
+- Keep automatic validation reveals transient and tolerate unavailable storage.
+
+## 4.5.1 - 2026-11-15
+
+- Move introduction and limit into the first advanced/filter row, using an
+  accessible pressed/unpressed introduction button. Keep remaining filters below.
+- Align native dropdowns, taxonomy selectors, picker buttons and numeric controls
+  without changing configuration or merged-mode limit behavior.
+
+## 4.5.0 - 2026-11-02
+
+- Add opt-in introductions for category/tag blocks, with native data and separate
+  sources.tag-intro / sources.category-intro and email layout override boundaries.
+- Preserve ordered primary selections and deduplicate introductions in merged lists.
+- Limit introductions to root Sources; allow nested Sources inside descriptions
+  without recursive introductions. Retain existing Contents depth/cycle guards.
+- Prepare site descriptions with native content contexts. Email uses only the
+  existing public-only Sources pipeline and sanitization, never general site plugins.
+- Keep version-2 storage compatible: optional showIntro=true; absent/false stays off.
+  Sources Email provider version is 1.2.0.
+
+## 4.4.4 - 2026-11-01
+
+- Truncate long Builder block headings with an ellipsis, keeping toolbar actions
+  visible and the full caption unchanged in its editable field.
+
 ## 4.4.3 - 2026-10-30
 
 - Route visible unavailable selections through sources.item and sources.email.item,

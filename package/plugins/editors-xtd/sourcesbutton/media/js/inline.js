@@ -32,8 +32,10 @@ export function validate(value) {
   const ordering = object(value.ordering ?? {}, ['mode', 'order']);
   if (!['blocks', 'global'].includes(ordering.mode ?? 'blocks') || !ORDERS.includes(ordering.order ?? 'published-desc')) throw new Error('Invalid container ordering.');
   return { version: 2, display: value.display, ordering: { mode: ordering.mode ?? 'blocks', order: ordering.order ?? 'published-desc' }, presentation: presentation(value.presentation ?? {}), blocks: value.blocks.map(block => {
-    object(block, ['type', 'name', 'title', 'articles', 'filters', 'presentation']);
+    object(block, ['type', 'name', 'title', 'articles', 'filters', 'presentation', 'showIntro', 'grouped']);
     if (!TYPES.includes(block.type)) throw new Error('Invalid Sources block type.');
+    if ((block.showIntro !== undefined && typeof block.showIntro !== 'boolean') || (block.type === 'articles' && block.showIntro)) throw new Error('Invalid Sources introduction.');
+    if ((block.grouped !== undefined && typeof block.grouped !== 'boolean') || (block.type === 'articles' && block.grouped)) throw new Error('Invalid Sources grouping.');
     const filters = object(block.filters ?? {}, ['tags', 'categories', 'order', 'limit', 'groupByCategory']);
     if (!ORDERS.includes(filters.order ?? 'published-desc') || typeof (filters.groupByCategory ?? false) !== 'boolean') throw new Error('Unsupported Sources ordering.');
     const articles = selectionValues(block.articles ?? [], 'articles'), tags = selectionValues(filters.tags ?? [], 'tags'), categories = selectionValues(filters.categories ?? [], 'categories');
@@ -42,7 +44,7 @@ export function validate(value) {
     if (block.name !== undefined) title(block.name);
     return { type: block.type, title: title(block.title ?? '') || title(block.name ?? ''), articles, filters: {
       tags, categories, order: filters.order ?? 'published-desc', ...(block.type === 'articles' ? {} : { limit: limit(filters.limit ?? 0) }),
-    }, presentation: presentation(block.presentation ?? {}, false) };
+    }, presentation: presentation(block.presentation ?? {}, false), ...(block.showIntro ? { showIntro: true } : {}), ...(block.grouped ? {grouped:true} : {}) };
   }) };
 }
 export const newBlock = (type = 'articles') => ({ type, title: '', articles: [], filters: { tags: [], categories: [], order: 'published-desc', ...(type === 'articles' ? {} : { limit: 16 }) }, presentation: { layout: 'cards' } });

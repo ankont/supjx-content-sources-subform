@@ -1,4 +1,22 @@
-# SuperSoftJx - Sources 4.4.3
+# SuperSoftJx - Sources 5.0.2
+
+5.0.0 adds consumer-scoped introduction Usage in SmartBrowser 6.1.0+, optional
+per-category/tag grouping, and paired introduction/results layout boundaries.
+Install the complete package including **System - SuperSoftJx - Sources Usage**
+(1.0.1), enabled automatically only on its first installation. Sources Email is
+1.3.0. Existing version-2 configuration remains supported without migration.
+See [the 5.0.0 presentation and group contract](docs/INTRODUCTIONS.md#sources-500).
+
+Empty Sources custom fields start without an automatically created Articles block.
+Existing saved blocks and the editor-button dialog's default are unchanged.
+
+The Builder remembers the last manual filter disclosure choice in the browser,
+independently of block expansion. Automatic validation reveals do not change it.
+
+Optional tag/category introductions use native titles, descriptions and images,
+with site/email layout overrides. Introductions appear only at the root Sources
+level; their descriptions may contain Sources without adding further introductions.
+See [introduction layouts and consumer contract](docs/INTRODUCTIONS.md).
 
 Unavailable resources now use the regular site/email item layouts. See
 [consumer contract and migration notes](docs/UNAVAILABLE_PRESENTATION.md).

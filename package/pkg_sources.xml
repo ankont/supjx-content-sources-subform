@@ -2,13 +2,13 @@
 <extension type="package" version="4.0" method="upgrade">
     <name>SuperSoftJx - Sources</name>
     <packagename>sources</packagename>
-    <creationDate>2026-10-30</creationDate>
+    <creationDate>2026-11-17</creationDate>
     <author>SuperSoft — Kontarinis Andreas</author>
     <authorEmail></authorEmail>
     <authorUrl></authorUrl>
     <copyright>© 2026 SuperSoft — Kontarinis Andreas</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
-    <version>4.4.3</version>
+    <version>5.0.2</version>
     <description>PKG_SOURCES_XML_DESCRIPTION</description>
 
     <languages folder="language">
@@ -23,5 +23,6 @@
         <file type="plugin" id="sourcesbutton" group="editors-xtd">plg_editors_xtd_sourcesbutton.zip</file>
         <file type="plugin" id="sources" group="fields">plg_fields_sources.zip</file>
         <file type="plugin" id="sourcesemail" group="newsletter">plg_newsletter_sourcesemail.zip</file>
+        <file type="plugin" id="sourcesusage" group="system">plg_system_sourcesusage.zip</file>
     </files>
 </extension>

@@ -21,6 +21,8 @@ final class InlineRenderer
     private static array $embedded = [];
     private static array $renderingItems = [];
     private static int $contentsPreviewDepth = 0;
+    private static int $renderDepth = 0;
+    private static int $introductionDepth = 0;
 
     public static function isContentsPreview(): bool { return self::$contentsPreviewDepth > 0; }
 
@@ -34,6 +36,14 @@ final class InlineRenderer
     public function render(array $config, object $article, string $mode = 'render', string $purpose = 'output'): string
     {
         if (self::isContentsPreview()) { return ''; }
+        self::$renderDepth++;
+        try {
+            return $this->renderContainer($config, $article, $mode, $purpose);
+        } finally { self::$renderDepth--; }
+    }
+
+    private function renderContainer(array $config, object $article, string $mode, string $purpose): string
+    {
         $blocks = $this->resolveBlocks($config, $mode);
         if (!$blocks) { return ''; }
         $html = '';
@@ -43,11 +53,17 @@ final class InlineRenderer
             $visibility = $this->params->get('show_unavailable', '');
             $showUnavailable = $prepared ? SelectionOutputRenderer::showUnavailable($visibility) : false;
             if ($prepared && !$showUnavailable && !array_filter($prepared, static fn($entry) => !self::unavailable($entry))) { continue; }
+            $start = strlen($html); $introHtml = '';
             $tag = (string) $this->params->get('heading_tag', 'h2');
             if (!in_array($tag, ['h2', 'h3', 'h4', 'h5', 'div', 'none'], true)) { $tag = 'h2'; }
             if ($block['title'] !== '' && $tag !== 'none') {
                 $class = trim((string) $this->params->get('heading_class', '')) ?: 'sources-heading jl-h4 jl-margin-bottom';
                 $html .= '<' . $tag . ' class="' . self::escape($class) . '">' . self::escape($block['title']) . '</' . $tag . '>';
+            }
+            if ($mode === 'render') {
+                foreach ($block['introductions'] ?? [] as $intro) {
+                    $introHtml .= $this->introduction($intro, $article, $purpose, $block['layout'], $config['display']);
+                }
             }
             $layout = $block['layout'];
             $html .= '<div class="sources-' . ($mode !== 'render' || $layout === 'list' ? 'list' : ($layout === 'contents' ? 'contents' : 'grid'))
@@ -78,6 +94,15 @@ final class InlineRenderer
                     . self::escape($this->filterTitles('tags', $filters['tags'])) . ' · ' . self::escape(Text::_('PLG_CONTENT_SOURCES_CRITERIA_CATEGORIES')) . ': '
                     . self::escape($this->filterTitles('categories', $filters['categories'])) . $limitSummary . '</div>';
             }
+            if ($mode === 'render' && ($introHtml !== '' || isset($block['group']))) {
+                $results = substr($html, $start); $html = substr($html, 0, $start);
+                $html .= $this->itemLayout('sources.group')->render([
+                    'introductions_html'=>$introHtml, 'results_html'=>$results, 'introductions'=>$block['introductions'] ?? [],
+                    'group'=>$block['group'] ?? null, 'layout'=>$block['layout'], 'display'=>$config['display'],
+                    'purpose'=>$purpose === 'preview' ? 'preview' : 'output', 'parent_article_id'=>(int) ($article->id ?? 0),
+                    'collapsible'=>(bool) array_filter($block['introductions'] ?? [], static fn($intro)=>($intro['presentation']['layout'] ?? '') === 'collapsible'),
+                ]);
+            }
         }
         return $html === '' ? '' : '<section class="sources-section jl-margin-top">' . $html . '</section>';
     }
@@ -87,35 +112,139 @@ final class InlineRenderer
         return !empty($entry['unavailable']) || !empty($entry['resource']['unavailable']) || (int) ($entry['resource']['metadata']['state'] ?? 1) === -2;
     }
 
+    private function introduction(array $intro, object $article, string $purpose, string $layout, string $display): string
+    {
+        self::$introductionDepth++;
+        try {
+            $presentation = $intro['presentation'] ?? IntroUsage::presentation([]);
+            $selected = $this->prepareIntroduction($intro);
+            if ($selected !== null && self::unavailable($selected)) { return ''; }
+            // Protect Sources from category/blog token handling, then use the same renderer.
+            $replacements = [];
+            $prefix = 'SOURCES_INTRO_' . hash('sha256', (string) $intro['entity']->description) . '_';
+            $rawDescription = in_array($presentation['elements'], ['both','description'], true) ? (string) $intro['entity']->description : '';
+            $description = $rawDescription;
+            if ($rawDescription !== '' && empty($intro['entity']->sources_description_plain)) {
+                $description = InlineTokens::replace($rawDescription, static function (array $nested) use (&$replacements, $prefix): string {
+                    $marker = $prefix . count($replacements) . '_END';
+                    $replacements[$marker] = $nested;
+                    return $marker;
+                });
+                $description = \Joomla\CMS\HTML\HTMLHelper::_('content.prepare', $description, null,
+                    $intro['type'] === 'tags' ? 'com_tags.tag' : 'com_content.category');
+                foreach ($replacements as $marker => $nested) {
+                    if (str_contains($description, $marker)) {
+                        $description = str_replace($marker, $this->render($nested, $article, 'render', $purpose), $description);
+                    }
+                }
+            }
+            return $this->itemLayout('sources.' . ($intro['type'] === 'tags' ? 'tag' : 'category') . '-intro')->render([
+                'entity' => clone $intro['entity'], 'type' => $intro['type'], 'purpose' => $purpose === 'preview' ? 'preview' : 'output',
+                'layout' => $layout, 'display' => $display, 'parent_article_id' => (int) ($article->id ?? 0),
+                'criteria' => $intro['criteria'], 'public_only' => $this->publicOnly, 'depth' => 1,
+                'description_html' => $description,
+                'presentation'=>$presentation, 'selected'=>$selected,
+            ]);
+        } finally { self::$introductionDepth--; }
+    }
+
+    public function prepareIntroduction(array $intro): ?array
+    {
+        if (!ComponentHelper::isEnabled('com_smartbrowser')) { return null; }
+        $this->app->bootComponent('com_smartbrowser');
+        if (!class_exists(\SuperSoft\Component\Smartbrowser\Administrator\Support\ConsumerUsage::class)) { return null; }
+        IntroUsage::register();
+        $adapter = $intro['type']; $type = $adapter === 'tags' ? 'tag' : 'category';
+        $profile = IntroUsage::profile() + ['visual.thumbnailOverride'=>true,'visual.iconOverride'=>true,'visual.presentation'=>true];
+        $config = SelectionFieldSupport::configuration(['adapter'=>$adapter,'multiple'=>true,'selection_target'=>'node',
+            'selection_profile'=>json_encode($profile, JSON_THROW_ON_ERROR)]);
+        $config['consumer'] = 'sources';
+        $prepared = SourceFieldData::withoutRendering(static fn()=>SelectionFieldSupport::prepare(json_encode(['version'=>1,'items'=>[
+            ['selection'=>['adapter'=>$adapter,'id'=>$type . ':' . $intro['entity']->id], 'usage'=>(object) ($intro['usage'] ?? [])],
+        ]], JSON_THROW_ON_ERROR), $config, null, true));
+        return empty($prepared['invalid']) && isset($prepared['items'][0]) ? $prepared['items'][0] : ['unavailable'=>true];
+    }
+
     /** Shared data-only block selection/merge/order pipeline; no layouts or SmartBrowser calls. */
-    public function resolveBlocks(array $config, string $mode = 'render', ?int $budget = null): array
+    public function resolveBlocks(array $config, string $mode = 'render', ?int $budget = null, bool $includeIntroductions = true): array
     {
         $remainingBudget = $budget ?? self::$remainingItems;
         $blocks = [];
         $remaining = $config['display'] === 'merged' ? 2000 : InlineConfig::MAX_ITEMS;
         $commonOrder = $config['display'] === 'merged' && $config['ordering']['mode'] === 'global' && $mode !== 'list_manual' ? $config['ordering']['order'] : null;
-        foreach ($config['blocks'] as $block) {
+        $sourceBlocks = (static function () use ($config) {
+            foreach ($config['blocks'] as $blockIndex=>$source) {
+                if ($config['display'] === 'separate' && !empty($source['grouped']) && $source['type'] !== 'articles') {
+                    foreach ($source['filters'][$source['type']] as $index=>$selection) {
+                        $copy = $source; $copy['filters'][$source['type']] = [$selection];
+                        $copy['group'] = ['type'=>$source['type'], 'id'=>SelectionUsage::ids([$selection])[0], 'index'=>$index, 'block_index'=>$blockIndex];
+                        yield $copy;
+                    }
+                } else { yield $source; }
+            }
+        })();
+        foreach ($sourceBlocks as $block) {
             if ($remaining <= 0 || $remainingBudget <= 0) { break; }
             $items = array_slice($this->resolve($block, $mode !== 'list_manual', $commonOrder, $config['display'] !== 'merged'), 0, min($remaining, $remainingBudget));
             $remaining -= count($items);
             $remainingBudget -= count($items);
             if ($budget === null) { self::$remainingItems -= count($items); }
             if ($items || $mode === 'list_manual') {
-                $blocks[] = ['title' => $block['title'], 'layout' => $block['presentation']['layout'], 'items' => $items, 'filters' => $block['filters']];
+                $blocks[] = ['title' => $block['title'], 'layout' => $block['presentation']['layout'], 'items' => $items, 'filters' => $block['filters'],
+                    ...(isset($block['group']) ? ['group'=>$block['group']] : []),
+                    ...($includeIntroductions && self::$renderDepth <= 1 && self::$introductionDepth === 0 && !self::$embedded
+                        && !empty($block['showIntro']) && in_array($mode, ['render', 'email'], true) ? ['introductions' => $this->resolveIntroductions($block)] : [])];
             }
         }
         if ($config['display'] === 'merged' && $mode !== 'list_manual') {
             $unique = [];
+            $introductions = [];
             foreach ($blocks as $block) {
                 foreach ($block['items'] as $item) { $unique[$item->id] ??= $item; }
+                foreach ($block['introductions'] ?? [] as $intro) { $introductions[$intro['type'] . ':' . $intro['entity']->id] ??= $intro; }
             }
             $items = array_values($unique);
             if ($config['ordering']['mode'] === 'global') { $items = $this->sortItems($items, $config['ordering']['order']); }
             $limit = $config['presentation']['limit'];
             $items = array_slice($items, 0, $limit ?: InlineConfig::MAX_ITEMS);
-            $blocks = $items ? [['title' => $config['presentation']['title'], 'layout' => $config['presentation']['layout'], 'items' => $items]] : [];
+            $blocks = $items ? [['title' => $config['presentation']['title'], 'layout' => $config['presentation']['layout'], 'items' => $items,
+                ...($introductions ? ['introductions' => array_values($introductions)] : [])]] : [];
         }
         return $blocks;
+    }
+
+    /** Resolve only primary taxonomy entities, never their article lists or content events. */
+    public function resolveIntroductions(array $block): array
+    {
+        if (empty($block['showIntro']) || !in_array($block['type'], ['categories', 'tags'], true)) { return []; }
+        $type = $block['type'];
+        $ids = SelectionUsage::ids($block['filters'][$type]);
+        if (!$ids) { return []; }
+        $levels = array_map('intval', ($this->publicOnly ? new User(0) : $this->app->getIdentity())->getAuthorisedViewLevels());
+        $access = implode(',', $levels ?: [0]);
+        $table = $this->db->quoteName('#__' . $type);
+        $query = $this->db->getQuery(true)->select('t.id, t.title, t.alias, t.description, t.params, t.language' . ($type === 'tags' ? ', t.images' : ''))
+            ->from($table . ' AS t')->where('t.id IN (' . implode(',', $ids) . ')')
+            ->where('t.published = 1')->where('t.access IN (' . $access . ')');
+        if ($type === 'categories') {
+            $query->where('t.extension = ' . $this->db->quote('com_content'));
+            $query->where('NOT EXISTS (SELECT 1 FROM ' . $table . ' AS ancestor WHERE ancestor.lft <= t.lft AND ancestor.rgt >= t.rgt AND ancestor.extension = '
+                . $this->db->quote('com_content') . ' AND (ancestor.published != 1 OR ancestor.access NOT IN (' . $access . ')))');
+        }
+        if (method_exists($this->app, 'getLanguageFilter') && $this->app->getLanguageFilter()) {
+            $query->where('t.language IN (' . $this->db->quote($this->app->getLanguage()->getTag()) . ',' . $this->db->quote('*') . ')');
+        }
+        $rows = RequestCache::remember(RequestCache::key('introductions', [spl_object_id($this->db), (string) $query]),
+            fn() => $this->db->setQuery($query, 0, InlineConfig::MAX_ITEMS)->loadObjectList('id'));
+        $result = [];
+        foreach ($ids as $id) {
+            $usage = [];
+            foreach ($block['filters'][$type] as $entry) { if (SelectionUsage::ids([$entry])[0] === $id && is_array($entry)) { $usage = $entry['usage'] ?? []; break; } }
+            if (isset($rows[$id])) { $result[] = ['type' => $type, 'entity' => IntroUsage::entity($rows[$id], $usage),
+                'usage'=>$usage, 'presentation'=>IntroUsage::presentation($usage),
+                'criteria' => ['tags' => SelectionUsage::ids($block['filters']['tags']), 'categories' => SelectionUsage::ids($block['filters']['categories'])]]; }
+        }
+        return $result;
     }
 
     private function baseQuery()
@@ -285,19 +414,7 @@ final class InlineRenderer
         $headerOnly = $reason !== null;
         $renderKey = $item->id . ':' . (int) $headerOnly;
         if (isset(self::$renderingItems[$renderKey])) { return ''; }
-        $renderer = new FileLayout('sources.item', null, ['component' => 'com_content', 'client' => 0]);
-        $paths = $renderer->getDefaultIncludePaths();
-        if (!$this->app->isClient('site')) {
-            $query = $this->db->getQuery(true)->select('template')->from('#__template_styles')
-                ->where('client_id = 0')->where('home != ' . $this->db->quote('0'))->order('id ASC');
-            $template = basename((string) $this->db->setQuery($query, 0, 1)->loadResult());
-            if ($template !== '') {
-                array_unshift($paths, JPATH_SITE . '/templates/' . $template . '/html/layouts/com_content',
-                    JPATH_SITE . '/templates/' . $template . '/html/layouts');
-            }
-        }
-        // The packaged layout is the lowest-priority fallback, never an override bypass.
-        $renderer->setIncludePaths([...$paths, dirname(__DIR__, 2) . '/layouts']);
+        $renderer = $this->itemLayout('sources.item');
         $wasActive = isset(self::$embedded[$item->id]);
         self::$renderingItems[$renderKey] = true;
         if (!$wasActive && $layout === 'contents' && !$headerOnly) { self::$embedded[$item->id] = true; }
@@ -326,6 +443,22 @@ final class InlineRenderer
             if (!$wasActive) { unset(self::$embedded[$item->id]); }
             while (ob_get_level() > $level) { ob_end_clean(); }
         }
+    }
+
+    private function itemLayout(string $name): FileLayout
+    {
+        $renderer = new FileLayout($name, null, ['component' => 'com_content', 'client' => 0]);
+        $paths = $renderer->getDefaultIncludePaths();
+        if (!$this->app->isClient('site')) {
+            $query = $this->db->getQuery(true)->select('template')->from('#__template_styles')
+                ->where('client_id = 0')->where('home != ' . $this->db->quote('0'))->order('id ASC');
+            $template = basename((string) $this->db->setQuery($query, 0, 1)->loadResult());
+            if ($template !== '') {
+                array_unshift($paths, JPATH_SITE . '/templates/' . $template . '/html/layouts/com_content', JPATH_SITE . '/templates/' . $template . '/html/layouts');
+            }
+        }
+        $renderer->setIncludePaths([...$paths, dirname(__DIR__, 2) . '/layouts']);
+        return $renderer;
     }
 
     private function previewContents(object $item, callable $render): string

@@ -57,11 +57,15 @@ namespace Joomla\CMS {
 namespace Joomla\CMS\Layout {
     class FileLayout {
         public static $override = null;
+        public static $introOverride = null;
+        public static $groupOverride = null;
         private array $paths = [];
         public function __construct(private string $name, ...$args) {}
         public function getDefaultIncludePaths() { return []; }
         public function setIncludePaths($paths) { $this->paths = $paths; }
         public function render($displayData) {
+            if ($this->name === 'sources.email.group' && is_callable(self::$groupOverride)) { return (self::$groupOverride)($displayData); }
+            if (str_ends_with($this->name, '-intro') && is_callable(self::$introOverride)) { return (self::$introOverride)($displayData, $this->name); }
             if ($this->name === 'sources.email.item' && is_callable(self::$override)) { return (self::$override)($displayData); }
             foreach ($this->paths as $path) {
                 $file = $path . '/' . str_replace('.', '/', $this->name) . '.php';
@@ -87,7 +91,7 @@ namespace {
     function check($v, $message) { if (!$v) throw new \RuntimeException($message); }
     class Query { public string $sql = ''; public function __call($key, $args) { $this->sql .= ' ' . $key . ':' . implode(' ', $args); return $this; } public function __toString() { return $this->sql; } }
     Factory::$db = new class {
-        public int $queries = 0; public string $sql = ''; public array $articles = [];
+        public int $queries = 0; public string $sql = ''; public array $articles = []; public array $entities = [];
         public function getQuery($new) { return new Query(); }
         public function quoteName($v, $alias = null) { return $v . ($alias ? ' AS ' . $alias : ''); }
         public function quote($v) { return "'" . $v . "'"; }
@@ -96,6 +100,11 @@ namespace {
             check($limit > 0 && $limit <= InlineConfig::MAX_ITEMS, 'Query must retain shared selector bounds'); $this->queries++; $this->sql = (string) $query; return $this;
         }
         public function loadObjectList($key = null) {
+            if (str_contains($this->sql, 'from:#__tags AS t') || str_contains($this->sql, 'from:#__categories AS t')) {
+                foreach (['t.published = 1', 't.access IN (1)', 't.language IN ('] as $guard) { check(str_contains($this->sql, $guard), 'Missing public taxonomy guard'); }
+                if (str_contains($this->sql, '#__categories AS t')) { check(str_contains($this->sql, 'ancestor.access NOT IN'), 'Category ancestry missing'); }
+                return array_intersect_key($this->entities, array_flip([8, 12]));
+            }
             foreach (['a.state = 1', 'c.published = 1', 'a.access IN (1)', 'c.access IN (1)', 'ancestor.access', 'publish_up', 'publish_down', 'a.language', 'c.language'] as $guard) check(str_contains($this->sql, $guard), 'Missing public SQL guard ' . $guard);
             $rows = []; $ids = array_keys($this->articles);
             if (preg_match('/\ba\.id IN \(([0-9,]+)\)/', $this->sql, $m)) $ids = array_map('intval', explode(',', $m[1]));
@@ -181,6 +190,61 @@ namespace {
     try { \SuperSoft\Plugin\Content\Sources\Support\EmailPreview::render($usage, 'render'); throw new \LogicException('Expected unsupported Usage failure'); }
     catch (\RuntimeException $error) { check(Factory::$identity === $author, 'Failed email preview leaked public identity'); }
     Factory::$identity = null;
+    $taxonomy = InlineConfig::decode('{"version":2,"display":"separate","blocks":[{"type":"tags","showIntro":true,"filters":{"tags":[12,8,99]}}]}');
+    $nestedTaxonomy = $token($taxonomy);
+    Factory::$db->entities = [8 => (object) ['id'=>8, 'title'=>'Tag eight', 'description'=>'Eight description', 'params'=>'{}', 'images'=>'{"image_intro":"images/eight.jpg"}'],
+        12 => (object) ['id'=>12, 'title'=>'Tag twelve', 'description'=>'Twelve <script>bad()</script> ' . $nestedTaxonomy, 'params'=>'{"image":"images/twelve.jpg"}', 'images'=>'{}']];
+    $localTaxonomy = $taxonomy; $localTaxonomy['blocks'][0]['grouped'] = true;
+    $localTaxonomy['blocks'][0]['filters']['tags'] = [['selection'=>['adapter'=>'tags','id'=>'tag:12'],'usage'=>[
+        'ext.sources.introTitle'=>'Local introduction','ext.sources.introDescription'=>'Local <script> description',
+        'ext.sources.introLayout'=>'collapsible','ext.sources.introElements'=>'title','ext.sources.introClass'=>'feature']],8];
+    $groups=[];
+    \Joomla\CMS\Layout\FileLayout::$groupOverride = static function ($data) use (&$groups) {
+        $groups[] = $data['group']['id'];
+        foreach ($data['introductions'] as $intro) { check(is_array($intro['entity']) && !str_contains($intro['entity']['description'],'<script'), 'Email group received raw native description'); }
+        return $data['introductions_html'] . $data['results_html'];
+    };
+    $doc = $dispatch($token($localTaxonomy));
+    check($groups === [12,8] && str_contains($doc->get('html'),'Local introduction') && !str_contains($doc->get('html'),'Local &lt;script&gt; description'), 'Grouped email/per-selection visibility lost');
+    \Joomla\CMS\Layout\FileLayout::$groupOverride = null;
+    $doc = $dispatch($token($localTaxonomy));check(!str_contains($doc->get('html'),'<details'), 'Email must keep collapsible results visible');
+    foreach (['tags', 'categories'] as $type) foreach (['preview', 'send'] as $purpose) foreach (InlineConfig::LAYOUTS as $layout) {
+        $taxonomy['blocks'][0]['type'] = $type; $taxonomy['blocks'][0]['filters'][$type] = [12,8,99];
+        $taxonomy['blocks'][0]['presentation']['layout'] = $layout;
+        $doc = $dispatch($token($taxonomy), ['purpose'=>$purpose]);
+        check($doc->get('errors') === ['previous'], 'Email introduction preparation failed');
+        $html = $doc->get('html');
+        check(substr_count($html, 'Tag twelve') === 1 && substr_count($html, 'Tag eight') === 1, 'Email intro recursion/order');
+        check(!str_contains($html, 'bad()') && !str_contains($html, '{sources:') && str_contains($html, 'Public title'), 'Email description Sources must use safe email output');
+        check(strpos($html, 'Tag twelve') < strpos($html, 'Tag eight'), 'Email primary order lost');
+        $expected = (new EmailRenderer(new Registry(array_replace($base, ['purpose'=>$purpose])), $root . '/plugins/newsletter/sourcesemail/layouts'))->prepare($token($taxonomy));
+        check($html === $expected, 'Final email and preview diverged');
+        $seenIntros = [];
+        \Joomla\CMS\Layout\FileLayout::$introOverride = static function ($data, $name) use (&$seenIntros, $layout, $purpose, $type) {
+            check($name === 'sources.email.' . ($type === 'tags' ? 'tag' : 'category') . '-intro', 'Email intro override bypassed');
+            check($data['layout'] === $layout && $data['purpose'] === ($purpose === 'preview' ? 'preview' : 'output') && $data['public_only'], 'Email intro context');
+            check(is_array($data['entity']) && !str_contains($data['entity']['description'], '<script'), 'Email override received unsanitized model');
+            $seenIntros[] = $data['entity']['id']; return 'INTRO';
+        };
+        $doc = $dispatch($token($taxonomy), ['purpose'=>$purpose]);
+        check($seenIntros === [12,8] && $doc->get('errors') === ['previous'], 'Email introductions should be first-level only');
+        \Joomla\CMS\Layout\FileLayout::$introOverride = null;
+    }
+    $taxonomy['display'] = 'merged'; $taxonomy['blocks'][] = $taxonomy['blocks'][0];
+    $doc = $dispatch($token($taxonomy)); check(substr_count($doc->get('html'), 'Tag twelve') === 1, 'Merged email introductions must deduplicate');
+    unset($taxonomy['blocks'][0]['showIntro'], $taxonomy['blocks'][1]['showIntro']);
+    $doc = $dispatch($token($taxonomy)); check(!str_contains($doc->get('html'), 'Tag twelve'), 'Disabled email introduction');
+    $taxonomy['display'] = 'separate'; $taxonomy['blocks'] = [$taxonomy['blocks'][0]]; $taxonomy['blocks'][0]['showIntro'] = true;
+    $contents = $config; $contents['blocks'][0]['presentation']['layout'] = 'contents';
+    Factory::$db->articles[1]->fulltext = $token($taxonomy);
+    $doc = $dispatch($token($contents));
+    check(!str_contains($doc->get('html'), 'Tag twelve') && $doc->get('errors') === ['previous'], 'Email Contents must not recursively add taxonomy introductions');
+    Factory::$db->articles[1]->fulltext = '';
+    $emailRenderer = new EmailRenderer(new Registry($base), $root . '/plugins/newsletter/sourcesemail/layouts');
+    \Joomla\CMS\Layout\FileLayout::$introOverride = static function () { throw new RuntimeException('Intro override failure'); };
+    try { $emailRenderer->prepare($token($taxonomy)); } catch (RuntimeException $error) {}
+    \Joomla\CMS\Layout\FileLayout::$introOverride = null;
+    check(substr_count($emailRenderer->prepare($token($taxonomy)), 'Tag twelve') === 1, 'Email introduction failure leaked guard');
     require dirname(__DIR__, 2) . '/pkg_smartbrowser/package/component/admin/src/Support/SelectionOutputRenderer.php';
     \Joomla\CMS\Component\ComponentHelper::$smart = true;
     foreach ([0, 1] as $global) foreach ([false, true] as $image) foreach ([false, true] as $icon)

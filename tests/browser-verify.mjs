@@ -13,6 +13,9 @@ const artifacts = resolve(repo, 'tests/artifacts'); await mkdir(artifacts, { rec
 const toolbarLanguage = spawnSync('php', ['-r', 'echo json_encode(parse_ini_file($argv[1]));', resolve(repo, 'package/plugins/editors-xtd/sourcesbutton/language/el-GR/el-GR.plg_editors-xtd_sourcesbutton.ini')], { encoding:'utf8' });
 assert.equal(toolbarLanguage.status, 0, toolbarLanguage.stderr);
 const greek = JSON.parse(toolbarLanguage.stdout);
+const usageFixture=spawnSync('php',['-r',String.raw`require $argv[1]; echo json_encode(['definitions'=>\SuperSoft\Plugin\Content\Sources\Support\IntroUsage::definitions(),'labels'=>parse_ini_file($argv[2])]);`,resolve(repo,'package/plugins/content/sources/src/Support/IntroUsage.php'),resolve(repo,'package/plugins/content/sources/language/en-GB/en-GB.plg_content_sources.ini')],{encoding:'utf8'});
+assert.equal(usageFixture.status,0,usageFixture.stdout+usageFixture.stderr);
+const usageOptions=JSON.parse(usageFixture.stdout);
 const compactLabels = Object.fromEntries(['addShort_articles','addShort_categories','addShort_tags','pasteShort'].map(key => [key,greek['PLG_EDITORSXTD_SOURCESBUTTON_INLINE_'+key.toUpperCase()]]));
 const emailFixtures=spawnSync('php',['tests/php-email.php','--artifacts'],{cwd:repo,encoding:'utf8'});
 assert.equal(emailFixtures.status,0,emailFixtures.stdout+emailFixtures.stderr);
@@ -45,6 +48,7 @@ const server = createServer(async (req, res) => {
         'com_smartbrowser.picker':{url:location.origin+'/picker'},
         'plg_editorsxtd_sourcesbutton.inline':{editorSizeUrl:'/smart/js/picker-size.js',contentCss:'/sources/css/sourcesbutton.css?v=current-fixture',fontAwesomeUrl:'/joomla/media/system/css/joomla-fontawesome.min.css',previewMode:'placeholder',badgeLabel:'Sources',csrfToken:'test-token',ajaxUrl:'/preview',
         taxonomyEditor:location.search.includes('compact=1')?'compact':'collection',
+        usageCapabilities:${JSON.stringify(usageOptions.definitions)},usageLabels:${JSON.stringify(usageOptions.labels)},
         filterFields:${JSON.stringify({ tags: '<joomla-field-fancy-select><select id="tags" name="tags[]" multiple><option value="8">Tag 8</option><option value="12">Tag 12</option><option value="5">Tag 5</option></select></joomla-field-fancy-select>', categories: '<joomla-field-fancy-select><select id="categories" name="categories[]" multiple><option value="14">Category 14</option><option value="19">Category 19</option></select></joomla-field-fancy-select>' })},
         i18n:{...${JSON.stringify(compactLabels)},builder:'Sources Builder',insert:'Insert',update:'Update',cancel:'Cancel',addBlock:'Add block',addSources:'Add / change sources',title:'Title',sources:'Sources',presentation:'Presentation',filters:'Filters / advanced',tags:'Tags',categories:'Categories',limit:'Limit',layout:'Layout',separate:'Separate',merged:'Merged',duplicate:'Duplicate',delete:'Delete',up:'Move up',down:'Move down',untitled:'Source block',edit:'Edit Sources',advancedTags:'Advanced tag selection',advancedCategories:'Advanced category selection'}}};
       </script>
@@ -147,6 +151,8 @@ try {
     await page.evaluate(labels=>Object.assign(Joomla.getOptions('plg_editorsxtd_sourcesbutton.inline').i18n,labels),{
       expandAll:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_EXPANDALL,
       collapseAll:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_COLLAPSEALL,
+      showIntro:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_SHOWINTRO,
+      grouped:greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_GROUPED,
     });
     await edit();
     const manual=page.locator('.sources-block[data-type=articles]').first();
@@ -157,6 +163,67 @@ try {
     assert.equal(await page.locator('.sources-add-heading').textContent(),greek.PLG_EDITORSXTD_SOURCESBUTTON_INLINE_ADDBLOCK);
     await page.locator('.sources-add-section').screenshot({path:resolve(artifacts,'compact-add-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
     await manual.locator('.sources-block-toolbar').screenshot({path:resolve(artifacts,'block-tools-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+    if (process.argv.includes('--introductions-only')) {
+      assert.equal(await manual.locator('.sources-intro-option').count(),0);
+      for (const type of ['categories','tags']) {
+        const block=page.locator('.sources-block[data-type='+type+']').first();
+        const option=block.locator('.sources-intro-option:not(.sources-group-option)');
+        assert.equal(await option.getAttribute('aria-pressed'),'false');
+        await option.click();
+        const grouped=block.locator('.sources-group-option');
+        await grouped.click();assert.equal(await grouped.getAttribute('aria-pressed'),'true');
+        const primary=block.locator('.sources-filter-primary');
+        const buttonBox=await option.boundingBox(),limitBox=await primary.locator('input').boundingBox();
+        assert.ok(Math.abs(buttonBox.height-limitBox.height)<1,'First-row control heights differ');
+        if(width>600)assert.ok(Math.abs(buttonBox.y-limitBox.y)<1,'First-row controls are not aligned');
+        const row=block.locator('.sources-filter-actions');
+        const pickerBox=await row.locator('.sources-filter-picker').boundingBox();
+        const selectBox=await row.locator('.sources-field>select').boundingBox();
+        const fancyBox=await row.locator('.choices__inner').boundingBox();
+        assert.ok(Math.abs(pickerBox.height-selectBox.height)<1,'Filter button/select heights differ');
+        assert.ok(Math.abs(fancyBox.height-selectBox.height)<1,`Fancy/native select heights differ: ${fancyBox.height}/${selectBox.height}`);
+        if(width>600)assert.ok(Math.abs(pickerBox.y-selectBox.y)<1,'Filter controls are not aligned');
+        await page.locator('.sources-display button').nth(1).click();
+        assert.equal(await option.getAttribute('aria-pressed'),'true');
+        assert.equal(await grouped.isVisible(),false);
+        await page.locator('.sources-display button').nth(0).click();
+        assert.equal(await option.getAttribute('aria-pressed'),'true');
+        assert.equal(await grouped.getAttribute('aria-pressed'),'true');
+        if(!legacy){
+          const layout=block.getByLabel(/^Introduction layout/);
+          await layout.selectOption('card');
+          const elements=block.getByLabel(/^Introduction text/);
+          assert.equal(await elements.locator('option').count(),4);
+          await elements.selectOption('title');
+          const advancedUsage=block.locator('.resource-usage-secondary').first();await advancedUsage.locator('summary').click();
+          await block.getByLabel('Title override',{exact:true}).fill('Local heading');
+          await block.getByLabel('Description override',{exact:true}).fill('Local description');
+          await block.getByLabel('CSS class',{exact:true}).fill('feature');
+        } else {
+          await block.locator('.sources-collection [data-filter-picker='+type+']').click();
+          const frame=page.frameLocator('.smartbrowser-picker iframe');
+          await frame.locator('#cancel').waitFor();
+          const context=await frame.locator('body').evaluate(()=>({consumer:window.context.consumer,definitions:window.context.usageCapabilities.length}));
+          assert.deepEqual(context,{consumer:'sources',definitions:5});
+          await frame.locator('#cancel').click();
+        }
+        assert.equal(await option.evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+        await block.locator('.sources-advanced').screenshot({path:resolve(artifacts,'intro-'+type+'-'+(administrator?'admin':'site')+'-'+(legacy?'jce':'tiny')+'-'+width+'.png')});
+      }
+      assert.equal(await page.evaluate(()=>editor.getContent()),before);
+      await page.locator('.sources-builder-footer').getByRole('button',{name:'Update',exact:true}).click();
+      const saved=await page.evaluate(()=>inline.scan(editor.getContent())[0].config);
+      for(const type of ['categories','tags']){
+        const block=saved.blocks.find(block=>block.type===type);assert.equal(block.grouped,true);
+        if(!legacy){const usage=block.filters[type][0].usage;assert.equal(usage['ext.sources.introLayout'],'card');assert.equal(usage['ext.sources.introTitle'],'Local heading');assert.equal(usage['ext.sources.introElements'],'title');assert.equal(usage['ext.sources.introClass'],'feature');}
+      }
+      await edit();
+      assert.equal(await page.locator('.sources-block[data-type=categories] .sources-group-option').getAttribute('aria-pressed'),'true');
+      if(!legacy)assert.equal(await category.getByLabel(/^Introduction layout/).inputValue(),'card');
+      await page.locator('.sources-builder-footer').getByRole('button',{name:'Cancel',exact:true}).click();
+      console.log((administrator?'Atum':'Cassiopeia')+' '+(legacy?'JCE':'TinyMCE')+' '+width+': consumer Usage, group, update/reopen and native control geometry passed');
+      await page.close();continue;
+    }
     if (process.argv.includes('--validation-only')) {
       await page.locator('.sources-builder-footer').getByRole('button',{name:'Cancel',exact:true}).click();
       const verification=await page.evaluate(async()=>{

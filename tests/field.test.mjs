@@ -20,8 +20,10 @@ async function fixture(raw = '') {
 test('embedded Builder writes the existing field synchronously, without nested forms', async () => {
   const { input, host, instance } = await fixture();
   assert.equal(host.querySelectorAll('form,dialog').length, 0);
-  assert.equal(instance.builder.config.blocks.length, 1);
+  assert.equal(instance.builder.config.blocks.length, 0);
   assert.equal(input.value, '', 'An untouched optional field stays empty');
+  assert.equal(host.querySelector('.sources-field-toolbar button').disabled, true);
+  instance.builder.addButtons[0].click();
   const block = instance.builder.config.blocks[0], record = instance.builder.records.get(block);
   record.titleInput.value = 'Unsaved label'; record.titleInput.dispatchEvent(new Event('input', { bubbles: true }));
   assert.equal(JSON.parse(input.value).blocks[0].title, 'Unsaved label');
@@ -57,7 +59,7 @@ test('saving an untouched embedded field clears obsolete manual limits',async()=
 });
 
 test('embedded email preview reports the email dependency rather than blaming Content Sources',async()=>{
-  const {instance,host,dom}=await fixture();const previous=global.fetch;
+  const {instance,host,dom}=await fixture(JSON.stringify(newContainer()));const previous=global.fetch;
   dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};
   dom.window.HTMLDialogElement.prototype.close=function(){this.open=false};
   window.Joomla.getOptions=()=>({ajaxUrl:'/preview',csrfToken:'csrf',i18n:{previewEmailDisabled:'Email provider disabled'}});
@@ -83,7 +85,7 @@ test('external native changes remount from the same JSON, malformed data stays a
 });
 
 test('Save/Apply is blocked during selection or invalid drafts, but cancellation is allowed', async () => {
-  const { input, instance, form, dom } = await fixture();
+  const { input, instance, form, dom } = await fixture(JSON.stringify(newContainer()));
   instance.builder.pending = 1;
   const submit = () => form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
   assert.equal(submit(), false);

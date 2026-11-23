@@ -1,5 +1,6 @@
 <?php
 namespace SuperSoft\Plugin\Content\Sources\Support;
+require_once __DIR__ . '/IntroUsage.php';
 
 final class SelectionUsage
 {
@@ -34,6 +35,7 @@ final class SelectionUsage
         if ($adapter === 'articles') { $allowed[] = 'article.displayedName'; }
         $result = [];
         foreach (get_object_vars($value) as $key => $data) {
+            IntroUsage::value($key, $data, $adapter);
             if (!in_array($key, $allowed, true) && !preg_match('/^ext\.[a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*)*$/D', $key)) { throw new \InvalidArgumentException('Unsupported Sources usage.'); }
             if ($data === null) { if (str_starts_with($key, 'ext.')) { $result[$key] = null; } continue; }
             $valid = match ($key) {

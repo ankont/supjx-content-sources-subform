@@ -135,6 +135,19 @@ namespace {
             if ($layout === 'contents') check(str_contains($html, 'Full body'), 'Contents lost full article body');
         }
     }
+    // The introduction fallback uses the shared image provider once, with no
+    // mandatory visual work around an overriding introduction layout.
+    $introData = ['entity'=>(object) ['id'=>12,'title'=>'Introduction','params'=>'{}','images'=>'{}'],
+        'type'=>'tags','purpose'=>'preview','description_html'=>'<p>Intro text</p>',
+        'presentation'=>['layout'=>'card','elements'=>'both','class'=>'feature'], 'selected'=>$items['article:11']];
+    $introLayout = new FileLayout('sources.tag-intro', null, ['component'=>'com_content','client'=>0]);
+    $introLayout->setIncludePaths(['/fixture/template/html/layouts', dirname(__DIR__) . '/package/plugins/content/sources/layouts']);
+    $beforeIntro = $dispatcher->calls;
+    $introHtml = $introLayout->render($introData);
+    check($dispatcher->calls === $beforeIntro + 1 && str_contains($introHtml, 'data-sb-image-presentation="server"') && str_contains($introHtml,'override.jpg'), 'Introduction image override/presentation lost');
+    FileLayout::$overrides['sources.tag-intro'] = static fn($data)=>'Custom intro';
+    $introLayout->render($introData);check($dispatcher->calls === $beforeIntro + 1,'Introduction override forced image presentation');
+    unset(FileLayout::$overrides['sources.tag-intro']);
     FileLayout::$overrides['smartbrowser.resource'] = static function ($data) {
         return '<div class="site-identity">' . \Joomla\CMS\Layout\LayoutHelper::render('joomla.html.image', $data['image']) . '</div>';
     };

@@ -20,6 +20,7 @@ namespace {
     require $site . '/libraries/vendor/autoload.php';
     $root = sys_get_temp_dir() . '/sources-preview-styles-' . getmypid();
     define('JPATH_ROOT', $root);
+    define('JPATH_ADMINISTRATOR', $root);
     $directory = $root . '/media/plg_editors-xtd_sourcesbutton/css';
     mkdir($directory, 0777, true);
     $file = $directory . '/sourcesbutton.css';
@@ -47,6 +48,7 @@ namespace {
         \Joomla\CMS\Factory::$app = new class($document) {
             public function __construct(public $document) {}
             public function getDocument() { return $this->document; }
+            public function getLanguage() { return new class { public function load(...$args) {} }; }
         };
         require dirname(__DIR__) . '/package/plugins/editors-xtd/sourcesbutton/src/Extension/SourcesButton.php';
         $plugin = new \SuperSoft\Plugin\EditorsXtd\SourcesButton\Extension\SourcesButton();
