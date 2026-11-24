@@ -1,4 +1,4 @@
-# SuperSoftJx - Sources 5.1.1
+# SuperSoftJx - Sources 6.0.0
 
 5.1.1 moves the private email setting to Sources Email 1.4.1. Enable it there explicitly if needed.
 
@@ -9,8 +9,8 @@ through v2. The central private-email switch defaults to off. See the
 
 5.0.0 adds consumer-scoped introduction Usage in SmartBrowser 6.1.0+, optional
 per-category/tag grouping, and paired introduction/results layout boundaries.
-Install the complete package including **System - SuperSoftJx - Sources Usage**
-(1.0.1), enabled automatically only on its first installation. Sources Email is
+Install the complete package including **System - SuperSoftJx - Sources SmartBrowser Usage**
+(1.1.0), enabled automatically on a clean install. Sources Email is
 1.4.1. Existing version-2 configuration remains supported without migration.
 See [the 5.0.0 presentation and group contract](docs/INTRODUCTIONS.md#sources-500).
 
@@ -121,7 +121,7 @@ SmartBrowser. Enable the provider with Public access after installation.
 See [email output, overrides and limitations](docs/EMAIL_OUTPUT.md).
 
 4.0.3 separates Sources-field data consumption from rendering, reuses bounded
-request-local snapshots and avoids eager legacy field preparation. Local Catichisi
+request-local snapshots. Local Catichisi
 profiling and consumer instructions are documented in [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 4.0.2 standardizes localized extension names and release metadata. See
@@ -145,16 +145,12 @@ See [the item layout contract](docs/SHARED_OUTPUT.md#sources-item-layout-331).
 Field integration errors keep the original JSON available inside a closed advanced
 disclosure instead of automatically displaying the raw textarea below the Builder.
 
-## Temporary Legacy Compatibility
+## Upgrading to 6.0.0
 
-The content plugin temporarily renders original Custom Field blocks through the existing
-site template `html/com_content/article/sources.php`. Enabled by default; disable it in
-the content plugin after migration. The legacy field name defaults to `blocks`; existing
-template-path/token settings remain respected. Old numbered/rest tokens and automatic
-append are supported. Articles with inline JSON Sources or a nonempty accessible modern
-Sources field skip legacy rendering to avoid duplicates. Old values remain intact.
-No stored data or editor forms are changed. A missing template leaves content unchanged.
-This bridge does not fix frontend article-form binding.
+The old Custom Fields bridge, numbered/rest tokens and automatic legacy append
+are no longer supported. Convert old content to inline JSON or the modern Sources
+field before upgrading. Existing Custom Field definitions, values and article
+content are not deleted or rewritten.
 
 Sources supports inline article-content Containers and an optional article Custom Field. The package **SuperSoftJx - Sources** installs **Content - SuperSoftJx - Sources**, **Button - SuperSoftJx - Sources** and **Fields - SuperSoftJx - Sources**. Inline editing remains independent of Custom Fields; no new database tables are added.
 
@@ -330,8 +326,7 @@ Selection applies article/category publication and access checks, category ances
 
 Modern output no longer calls library.card/library.source-content or a Sources
 visual fallback. Embedding Contents uses Joomla content preparation after the
-shared resource identity. The optional legacy compatibility bridge still uses the
-old sources.php exclusively for unmigrated legacy Custom Fields.
+shared resource identity.
 
 Blog/category views hide valid Containers or show the configured bracketed placeholder. Editing contexts retain source tokens. Preview accepts unsaved inline configuration via authenticated, CSRF-protected POST, with content authoring permission checks; saving an article first is no longer required.
 

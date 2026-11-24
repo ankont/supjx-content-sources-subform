@@ -4,7 +4,7 @@ use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Factory;
 use SuperSoft\Plugin\Content\Sources\Support\IntroUsage;
-final class PlgSystemSourcesusage extends CMSPlugin
+final class PlgSystemSourcesSmartBrowserUsage extends CMSPlugin
 {
     public function onAfterInitialise(): void
     {

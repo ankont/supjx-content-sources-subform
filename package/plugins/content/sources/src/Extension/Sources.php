@@ -6,7 +6,6 @@ use Joomla\CMS\Language\Text;
 use Joomla\CMS\Plugin\CMSPlugin;
 use SuperSoft\Plugin\Content\Sources\Support\InlineTokens;
 use SuperSoft\Plugin\Content\Sources\Support\InlineRenderer;
-use SuperSoft\Plugin\Content\Sources\Support\LegacySources;
 
 final class Sources extends CMSPlugin
 {
@@ -29,8 +28,6 @@ final class Sources extends CMSPlugin
         }
         self::$renderDepth++;
         try {
-            // Run before inline output so template-rendered text is not mistaken for stored tokens.
-            LegacySources::prepare($context, $article, $this->params);
             if (strpos($article->text, '{sources:') === false) { return; }
             $renderer = new InlineRenderer($this->params);
             if ($app->getDocument()->getType() === 'html') {

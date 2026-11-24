@@ -20,8 +20,8 @@ namespace {
     $loader = require $site . '/libraries/vendor/autoload.php';
     $loader->addPsr4('Joomla\\CMS\\', $site . '/libraries/src');
     require dirname(__DIR__, 2) . '/pkg_smartbrowser/package/component/admin/src/Support/ConsumerUsage.php';
-    require JPATH_PLUGINS . '/system/sourcesusage/sourcesusage.php';
-    $plugin = new \PlgSystemSourcesusage();
+    require JPATH_PLUGINS . '/system/sourcessmartbrowserusage/sourcessmartbrowserusage.php';
+    $plugin = new \PlgSystemSourcesSmartBrowserUsage();
     if ((new \ReflectionMethod(\Joomla\CMS\Plugin\CMSPlugin::class, 'getApplication'))->invoke($plugin) !== null) { throw new \RuntimeException('Test must reproduce a non-injected Joomla plugin'); }
     $plugin->onAfterInitialise();
     $plugin->onBeforeRender();
@@ -34,10 +34,10 @@ namespace {
         public function setQuery($query) { $this->sql=(string)$query; return $this; }
         public function execute() { $this->writes++; }
     };
-    require JPATH_PLUGINS . '/system/sourcesusage/script.php';
-    $installer=new \PlgSystemSourcesusageInstallerScript();$installer->postflight('update',null);
+    require JPATH_PLUGINS . '/system/sourcessmartbrowserusage/script.php';
+    $installer=new \PlgSystemSourcesSmartBrowserUsageInstallerScript();$installer->postflight('update',null);
     if (\Joomla\CMS\Factory::$db->writes !== 0) { throw new \RuntimeException('Upgrade must preserve disabled state'); }
     $installer->postflight('install',null);$db=\Joomla\CMS\Factory::$db;
-    foreach (["folder = 'system'", "element = 'sourcesusage'", 'enabled = 1'] as $guard) { if (!str_contains($db->sql,$guard)) throw new \RuntimeException('Installer updated wrong records'); }
+    foreach (["folder = 'system'", "element = 'sourcessmartbrowserusage'", 'enabled = 1'] as $guard) { if (!str_contains($db->sql,$guard)) throw new \RuntimeException('Installer updated wrong records'); }
     echo "System registry bootstrap and scoped first-install activation passed\n";
 }

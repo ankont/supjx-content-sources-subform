@@ -58,7 +58,7 @@
 .sources-intro-option{min-width:0;min-height:38px;padding:7px 10px;font-size:14px;line-height:22px}
 .sources-intro-option[aria-pressed=true]{background:#e6f4f3;color:#076670;border-color:#087884}
 .sources-intro-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.sources-intro-actions>.sources-intro-option{flex:1 1 180px}
+.sources-intro-actions>.sources-intro-option{flex:1 1 150px;white-space:normal;overflow-wrap:anywhere}
 .sources-intro--card,.sources-intro--heading{display:flex;align-items:center;gap:16px;padding:16px;border:1px solid #d1dbe1;border-radius:6px;margin:14px 0}
 .sources-intro--card>.sources-intro__visual{flex:0 0 144px;max-width:144px}
 .sources-intro--heading>.sources-intro__visual{flex:0 0 72px;max-width:72px}

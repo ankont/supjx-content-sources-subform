@@ -3,7 +3,7 @@
 ## Sources 5.0.0
 
 Install SmartBrowser **6.1.0+ with consumer-selection-usage support** first. The
-package now includes System - SuperSoftJx - Sources Usage 1.0.1. It registers
+package now includes System - SuperSoftJx - Sources SmartBrowser Usage 1.1.0. It registers
 server-owned `sources` capabilities on every request, including Picker/API
 validation, and is enabled on first installation only. Updates do not re-enable
 a deliberately disabled plugin. Keep it enabled and available to editor users.

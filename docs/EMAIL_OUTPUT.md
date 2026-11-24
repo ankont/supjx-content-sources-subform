@@ -1,4 +1,4 @@
-# Sources Email Output (Package 5.1.1 / Provider 1.4.1)
+# Sources Email Output (Package 6.0.0 / Provider 1.4.1)
 
 ## Installation and Contract
 
@@ -11,7 +11,7 @@ diagnostic information, not an authorization mechanism.
 It has no dependency on Newsletter Bridge PHP classes and does nothing without
 the event. Native article output does not need SmartBrowser or SmartCrop.
 No-token content does not boot the Sources plugin, run queries or load assets.
-Content/Button/Fields share package version 5.1.1; the newsletter provider has
+Content/Button/Fields share package version 6.0.0; the newsletter provider has
 its independent version 1.4.1 (introduced at 1.0.0).
 
 The host owns author/job ACL, recipient identification, email addresses,

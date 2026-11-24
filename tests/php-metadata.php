@@ -31,10 +31,10 @@ check(value($email, '/extension/@group') === 'newsletter' && value($email, '/ext
 $emailDate = value($email, '/extension/creationDate');
 check((bool) preg_match('/^\d{4}-\d{2}-\d{2}$/D', $emailDate) && $emailDate <= $date, 'Independent newsletter provider release date');
 check($package->query('/extension/files/file[@id="sourcesemail" and @group="newsletter"]')->length === 1, 'Provider shipped in package');
-$usage = manifest($root . '/plugins/system/sourcesusage/sourcesusage.xml');
-check(value($usage,'/extension/version') === '1.0.1' && value($usage,'/extension/author') === value($package,'/extension/author'), 'Usage plugin author/version');
+$usage = manifest($root . '/plugins/system/sourcessmartbrowserusage/sourcessmartbrowserusage.xml');
+check(value($usage,'/extension/version') === '1.1.0' && value($usage,'/extension/author') === value($package,'/extension/author'), 'Usage plugin author/version');
 check(value($usage,'/extension/creationDate') <= $date, 'Usage plugin release date');
-check($package->query('/extension/files/file[@id="sourcesusage" and @group="system"]')->length === 1, 'Usage registration plugin not shipped');
+check($package->query('/extension/files/file[@id="sourcessmartbrowserusage" and @group="system"]')->length === 1, 'Usage registration plugin not shipped');
 foreach ($extensions as [$group, $element, $file, $key, $enFile, $elFile, $enGroup, $elGroup, $namespace]) {
     $directory = $root . '/plugins/' . $group . '/' . $element;
     $xml = manifest($directory . '/' . $file); $manifests[] = $xml;

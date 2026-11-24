@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.0 - 2026-11-24
+
+- Remove rendering and settings for the original Custom Fields bridge without
+  changing stored article content or field values.
+- Rename the system plugin to Sources SmartBrowser Usage (1.1.0).
+
 ## 5.1.1 - 2026-11-24
 
 - Move the default-off private email setting to Sources Email 1.4.1. Ignore the

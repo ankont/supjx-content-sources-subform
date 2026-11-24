@@ -20,7 +20,6 @@ namespace Joomla\Component\Fields\Administrator\Helper {
 }
 namespace {
     ob_start(); require __DIR__ . '/php-renderer.php'; ob_end_clean();
-    require dirname(__DIR__) . '/package/plugins/content/sources/src/Support/LegacySources.php';
     require dirname(__DIR__) . '/package/plugins/content/sources/src/Extension/Sources.php';
     use Joomla\CMS\Factory;
     use Joomla\CMS\Layout\FileLayout;
@@ -30,7 +29,6 @@ namespace {
     use SuperSoft\Component\Smartbrowser\Administrator\Support\SelectionFieldSupport as API;
     use SuperSoft\Plugin\Content\Sources\Support\InlineConfig;
     use SuperSoft\Plugin\Content\Sources\Support\InlineRenderer;
-    use SuperSoft\Plugin\Content\Sources\Support\LegacySources;
     use SuperSoft\Plugin\Content\Sources\Support\RequestCache;
     use SuperSoft\Plugin\Content\Sources\Support\SourceFieldData;
 
@@ -148,34 +146,5 @@ namespace {
     check(!isset($renderer->prepareOutput($renderer->resolve($one))['article:11']['resource']) && API::$calls === 1, 'Unavailable snapshot not reused safely or leaked resource data');
     API::$unavailable = false; RequestCache::reset();
 
-    $template = tempnam(sys_get_temp_dir(), 'sources-perf-');
-    file_put_contents($template, '<?php echo "legacy:" . implode(",", $sources_block_indices);');
-    $params = new Registry(['templates_base_path' => dirname($template), 'templates_entry_file' => basename($template)]);
-    $legacy = static function ($params, $text = 'Body') {
-        $item = (object) ['id' => 881, 'catid' => 4, 'text' => $text]; LegacySources::prepare('com_content.article', $item, $params); return $item->text;
-    };
-    try {
-        FieldsHelper::$fields = []; FieldsHelper::$raw = FieldsHelper::$prepared = 0;
-        $off = new Registry(['append_if_missing' => 0, 'templates_base_path' => dirname($template), 'templates_entry_file' => basename($template)]);
-        check($legacy($off) === 'Body' && FieldsHelper::$raw === 0, 'Disabled append performed unnecessary field work');
-        for ($i = 0; $i < 100; $i++) check($legacy($params) === 'Body', 'No-legacy article changed');
-        check(FieldsHelper::$raw === 1 && FieldsHelper::$prepared === 0, 'No-legacy repeats fully prepared fields');
-        RequestCache::reset(); FieldsHelper::$fields = [$field]; FieldsHelper::$raw = FieldsHelper::$prepared = 0;
-        check($legacy($params) === 'Body' && FieldsHelper::$prepared === 0, 'Modern Sources precedence caused full preparation');
-        RequestCache::reset();
-        FieldsHelper::$fields = [(object) ['name' => 'blocks', 'type' => 'subform', 'rawvalue' => '[{"title":"Legacy"}]']];
-        $beforeOther = FieldsHelper::$otherPlugins;
-        check($legacy($params) === 'Bodylegacy:0', 'Legacy append_if_missing semantics changed');
-        check($legacy($params, '{sources:1}{sources:rest}') === 'legacy:0', 'Legacy numbered/rest semantics changed');
-        check(FieldsHelper::$otherPlugins === $beforeOther + 2, 'Genuine legacy rendering skipped other field plugins');
-        RequestCache::reset(); FieldsHelper::$prepared = 0;
-        FieldsHelper::$onPrepare = static function ($item) use ($params) {
-            if (FieldsHelper::$prepared > 4) return;
-            $next = (object) ['id' => $item->id === 881 ? 882 : 881, 'catid' => 4, 'text' => 'Nested'];
-            LegacySources::prepare('com_content.article', $next, $params);
-        };
-        check($legacy($params) === 'Bodylegacy:0' && FieldsHelper::$prepared === 2, 'Legacy A-B-A cycle must stop without excluding distinct embedded articles');
-        FieldsHelper::$onPrepare = null;
-    } finally { unlink($template); }
     echo json_encode(['fixture' => 'same-code cache-off/cache-on, no real SQL/network', 'bench' => $bench], JSON_PRETTY_PRINT) . "\n";
 }

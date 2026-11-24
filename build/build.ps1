@@ -8,7 +8,7 @@ $contentPluginRoot = Join-Path $packageRoot 'plugins\content\sources'
 $editorPluginRoot = Join-Path $packageRoot 'plugins\editors-xtd\sourcesbutton'
 $fieldPluginRoot = Join-Path $packageRoot 'plugins\fields\sources'
 $emailPluginRoot = Join-Path $packageRoot 'plugins\newsletter\sourcesemail'
-$usagePluginRoot = Join-Path $packageRoot 'plugins\system\sourcesusage'
+$usagePluginRoot = Join-Path $packageRoot 'plugins\system\sourcessmartbrowserusage'
 $buildRoot = Join-Path $repoRoot 'build'
 $stageRoot = Join-Path $buildRoot 'stage'
 $outputRoot = Join-Path $buildRoot 'output'
@@ -133,7 +133,7 @@ $fieldZip = Join-Path $pluginsStageRoot 'plg_fields_sources.zip'
 New-ZipFromDirectoryContents -SourceDirectory $fieldPluginRoot -DestinationZip $fieldZip
 $emailZip = Join-Path $pluginsStageRoot 'plg_newsletter_sourcesemail.zip'
 New-ZipFromDirectoryContents -SourceDirectory $emailPluginRoot -DestinationZip $emailZip
-$usageZip = Join-Path $pluginsStageRoot 'plg_system_sourcesusage.zip'
+$usageZip = Join-Path $pluginsStageRoot 'plg_system_sourcessmartbrowserusage.zip'
 New-ZipFromDirectoryContents -SourceDirectory $usagePluginRoot -DestinationZip $usageZip
 
 $packageStage = Join-Path $stageRoot 'package'
