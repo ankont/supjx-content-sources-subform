@@ -11,6 +11,7 @@ $app = $container->get(\Joomla\CMS\Application\SiteApplication::class); \Joomla\
 $app->loadIdentity(new \Joomla\CMS\User\User()); $app->createExtensionNamespaceMap();
 (new ReflectionMethod($app, 'initialiseApp'))->invoke($app);
 $app->loadDocument();
+$app->getTemplate(true);
 $checks = 0;
 function check($v, $label) { global $checks; $checks++; if (!$v) throw new RuntimeException('FAIL: ' . $label); }
 spl_autoload_register(static function ($class) use ($candidate) {
@@ -24,6 +25,7 @@ use Joomla\Registry\Registry;
 use Joomla\Event\Event;
 use SuperSoft\Plugin\Content\Sources\Support\RequestCache;
 $original = $container->get(\Joomla\Database\DatabaseInterface::class);
+$originalLegacyDatabase = Factory::$database;
 $prefix = 'setest_' . bin2hex(random_bytes(5)) . '_';
 $db = (new \Joomla\Database\DatabaseFactory())->getDriver($app->get('dbtype', 'mysqli'), ['host' => $app->get('host'), 'user' => $app->get('user'), 'password' => $app->get('password'), 'database' => $app->get('db'), 'prefix' => $prefix, 'select' => true]);
 $tables = []; $files = []; $dirs = []; $pluginId = 0;
@@ -36,6 +38,7 @@ $child = new \Joomla\DI\Container($container); $child->set(\Joomla\Database\Data
 $makeDir = static function ($dir) use (&$makeDir, &$dirs) { if (is_dir($dir)) return; $makeDir(dirname($dir)); mkdir($dir, 0755); $dirs[] = $dir; };
 $resetFields = static function () use ($app, $db) {
     $factory = $app->bootComponent('com_fields')->getMVCFactory();
+    $factory->setDatabase($db);
     foreach (['fieldsCache' => 'Fields', 'fieldCache' => 'Field'] as $property => $name) {
         $model = $factory->createModel($name, 'Administrator', ['ignore_request' => true]); $model->setDatabase($db);
         if ($name === 'Fields') { $model->setState('filter.state', 1); $model->setState('list.limit', 0); }
@@ -52,8 +55,16 @@ $row = static function ($table, $values) use ($db) {
     $object = (object) $out; $db->insertObject($table, $object); return $object;
 };
 try {
-    foreach (['extensions', 'content', 'categories', 'fields', 'fields_values', 'fields_categories', 'fields_groups', 'contentitem_tag_map', 'tags', 'users', 'languages', 'viewlevels'] as $table) {
+    foreach (['extensions', 'content', 'categories', 'fields', 'fields_values', 'fields_categories', 'fields_groups', 'contentitem_tag_map', 'tags', 'users', 'usergroups', 'user_usergroup_map', 'assets', 'languages', 'viewlevels'] as $table) {
         $name = $prefix . $table; $db->setQuery('CREATE TABLE ' . $db->quoteName($name) . ' LIKE ' . $db->quoteName($original->getPrefix() . $table))->execute(); $tables[] = $name;
+    }
+    $row('#__usergroups', ['id'=>1,'parent_id'=>0,'lft'=>0,'rgt'=>5,'title'=>'Synthetic public']);
+    foreach ([501=>[1,2],502=>[3,4]] as $id=>$bounds) $row('#__usergroups',['id'=>$id,'parent_id'=>1,'lft'=>$bounds[0],'rgt'=>$bounds[1],'title'=>'Synthetic group ' . $id]);
+    foreach ([1=>[1],2=>[501],3=>[502]] as $id=>$groups) $row('#__viewlevels',['id'=>$id,'title'=>'Synthetic level ' . $id,'rules'=>json_encode($groups),'ordering'=>$id]);
+    $row('#__assets',['id'=>1,'parent_id'=>0,'lft'=>0,'rgt'=>1,'name'=>'root.1','title'=>'Synthetic root','rules'=>'{"core.admin":{"1":false}}']);
+    foreach ([910000021=>501,910000022=>502,910000023=>501] as $id=>$group) {
+        $row('#__users',['id'=>$id,'name'=>'Synthetic reader','username'=>'synthetic-' . $id,'email'=>$id . '@example.invalid','block'=>$id===910000023 ? 1 : 0,'activation'=>'','params'=>'{}']);
+        $row('#__user_usergroup_map',['user_id'=>$id,'group_id'=>$group]);
     }
     $row('#__categories', ['id' => 1, 'parent_id' => 0, 'lft' => 0, 'rgt' => 20, 'title' => 'Synthetic root', 'alias' => 'root', 'extension' => 'system', 'published' => 1, 'access' => 1, 'language' => '*', 'params' => '{}', 'metadata' => '{}']);
     foreach ([2 => 1, 3 => 2] as $id => $access) $row('#__categories', ['id' => $id, 'parent_id' => 1, 'lft' => $id, 'rgt' => 15 - $id, 'title' => 'Synthetic category', 'alias' => 'synthetic-' . $id, 'extension' => 'com_content', 'published' => 1, 'access' => $access, 'language' => '*', 'params' => '{}', 'metadata' => '{}']);
@@ -75,6 +86,8 @@ try {
     // Mirror registration metadata for dependency/component lookups, never alter installed rows.
     $db->setQuery('INSERT INTO ' . $db->quoteName($prefix . 'extensions') . ' SELECT * FROM ' . $db->quoteName($original->getPrefix() . 'extensions'))->execute();
     Factory::$container = $child;
+    Factory::$database = $db;
+    \Joomla\CMS\Access\Access::clearStatics();
     $app->setLanguageFilter(true);
     $config = ['version' => 2, 'display' => 'separate', 'blocks' => [['type' => 'articles', 'articles' => [1, 2, 3, 4, 5, 6, 7, 8], 'presentation' => ['layout' => 'contents']]]];
     $raw = '{sources:' . json_encode($config) . '}';
@@ -91,6 +104,46 @@ try {
         check($doc->get('usage.items') === 1, 'private/unpublished/future/expired/restricted category excluded');
         check(str_contains($doc->get('html'), '<b>body</b> {name}') && !str_contains($doc->get('html'), '<script'), 'actual body sanitised');
         check($first === null || $first === $doc->get('html'), 'equivalent purpose output'); $first = $doc->get('html');
+    }
+    $equivalent=$document('<p>Outside {email}</p>' . $raw);
+    $equivalent->set('limits',['maxBytes'=>2000000]);
+    $app->getDispatcher()->dispatch('onNewsletterPrepareEmail', new Event('onNewsletterPrepareEmail',['context'=>'com_smartnewsletter.dispatch','document'=>$equivalent]));
+    check($equivalent->get('html')===$first && $equivalent->get('errors')===[],'alternate host with maxBytes-only limits');
+    $row('#__content',array_replace($common,['id'=>10,'alias'=>'synthetic-private-b','title'=>'Synthetic reader B','access'=>3]));
+    $db->setQuery("UPDATE #__content SET title='Synthetic reader A' WHERE id=2")->execute();
+    foreach ([501=>[2,2],502=>[3,10]] as $fieldId=>[$access,$articleId]) {
+        $row('#__fields',['id'=>$fieldId,'context'=>'com_content.article','type'=>'sources','name'=>'private-' . $fieldId,'title'=>'Synthetic private field','state'=>1,'access'=>$access,'language'=>'*','params'=>'{}','fieldparams'=>'{}','default_value'=>'','group_id'=>0,'only_use_in_subform'=>0]);
+        $row('#__fields_values',['field_id'=>$fieldId,'item_id'=>'1','value'=>json_encode(['version'=>2,'display'=>'separate','blocks'=>[['type'=>'articles','articles'=>[$articleId]]]])]);
+    }
+    $settings=PluginHelper::getPlugin('newsletter','sourcesemail');$savedParams=$settings->params;
+    $operator=new class extends \Joomla\CMS\User\User { public function getAuthorisedViewLevels() { return [1,2,3]; } };
+    $operator->id=900000009;$operator->guest=0;$app->loadIdentity($operator);
+    try {
+        $privateParams=new Registry($savedParams);$privateParams->set('email_private_enabled',1);$settings->params=$privateParams->toString();
+        $privateConfig=['version'=>2,'display'=>'separate','blocks'=>[['type'=>'articles','articles'=>[1,2,6,7,10],'presentation'=>['layout'=>'contents']]]];
+        $privateRaw='{sources:' . json_encode($privateConfig) . '}';
+        $privateCall=static function ($id,$private=true) use ($document,$privateRaw,$app) {
+            $doc=$document($privateRaw);$doc->set('version',2);$doc->set('publicOnly',!$private);$doc->set('userId',$id);$doc->set('limits',['maxBytes'=>2000000]);
+            $app->getDispatcher()->dispatch('onNewsletterPrepareEmail',new Event('onNewsletterPrepareEmail',['context'=>'com_smartnewsletter.dispatch','document'=>$doc]));return $doc;
+        };
+        RequestCache::reset();
+        $readerA=$privateCall(910000021);$readerB=$privateCall(910000022);$readerAgain=$privateCall(910000021);$guest=$privateCall(0,false);
+        check($readerA->get('errors')===[] && $readerA->get('warnings',[])===[],'private reader A succeeds ' . json_encode($readerA->get('warnings')));
+        check($readerB->get('errors')===[] && $readerB->get('warnings',[])===[],'private reader B succeeds');
+        check(str_contains($readerA->get('html'),'Synthetic reader A') && !str_contains($readerA->get('html'),'Synthetic reader B'),'reader A article/field ACL');
+        check(str_contains($readerB->get('html'),'Synthetic reader B') && !str_contains($readerB->get('html'),'Synthetic reader A'),'reader B article/field ACL');
+        check($readerAgain->get('html')===$readerA->get('html') && !str_contains($guest->get('html'),'Synthetic reader A') && !str_contains($guest->get('html'),'Synthetic reader B'),'cached reader/public isolation');
+        check($readerA->get('usage.items')===$readerB->get('usage.items')+2,'category and ancestor access matches recipient');
+        foreach ([910000023=>'sources.email.user_blocked',910009999=>'sources.email.user_invalid'] as $id=>$code) {
+            $denied=$privateCall($id);check($denied->get('warnings')===[$code] && $denied->get('html')===$guest->get('html'),'invalid/blocked recipient falls back publicly');
+        }
+        $privateParams->set('email_private_enabled',0);$settings->params=$privateParams->toString();
+        $disabled=$privateCall(910000021);check($disabled->get('warnings')===['sources.email.private_disabled'] && $disabled->get('html')===$guest->get('html'),'central switch disables private output');
+        check($app->getIdentity()===$operator,'real Joomla restores exact operator identity');
+    } finally {
+        $settings->params=$savedParams;$app->loadIdentity(new \Joomla\CMS\User\User());
+        $db->setQuery('DELETE FROM #__fields_values WHERE field_id IN (501,502)')->execute();$db->setQuery('DELETE FROM #__fields WHERE id IN (501,502)')->execute();
+        $resetFields();
     }
     $doc = $dispatch($document('<p>Plain {name}</p>')); check($doc->get('usage.tokens') === 0 && $doc->get('html') === '<p>Plain {name}</p>', 'no-token no-op');
     $doc = $dispatch($document('{sources:{"version":99}}')); check($doc->get('errors') !== [], 'future token fails closed');
@@ -213,6 +266,8 @@ try {
     echo 'Real Joomla loader/event/public-policy checks passed: ' . $checks . "; 3 memory-only messages, no real mail\n";
 } finally {
     Factory::$container = $container;
+    Factory::$database = $originalLegacyDatabase;
+    \Joomla\CMS\Access\Access::clearStatics();
     if ($pluginId) $original->setQuery('DELETE FROM #__extensions WHERE extension_id=' . $pluginId)->execute();
     $cache->setValue(null, $oldCache);
     foreach (array_reverse($tables) as $table) $db->setQuery('DROP TABLE IF EXISTS ' . $db->quoteName($table))->execute();

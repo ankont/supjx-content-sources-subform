@@ -1,10 +1,17 @@
-# SuperSoftJx - Sources 5.0.2
+# SuperSoftJx - Sources 5.1.1
+
+5.1.1 moves the private email setting to Sources Email 1.4.1. Enable it there explicitly if needed.
+
+5.1.0 accepts host-neutral email preparation requests. Sources Email 1.4.0 keeps
+the public v1 Bridge contract and adds opt-in, recipient-scoped private rendering
+through v2. The central private-email switch defaults to off. See the
+[email contract, capability discovery and caller examples](docs/EMAIL_OUTPUT.md).
 
 5.0.0 adds consumer-scoped introduction Usage in SmartBrowser 6.1.0+, optional
 per-category/tag grouping, and paired introduction/results layout boundaries.
 Install the complete package including **System - SuperSoftJx - Sources Usage**
 (1.0.1), enabled automatically only on its first installation. Sources Email is
-1.3.0. Existing version-2 configuration remains supported without migration.
+1.4.1. Existing version-2 configuration remains supported without migration.
 See [the 5.0.0 presentation and group contract](docs/INTRODUCTIONS.md#sources-500).
 
 Empty Sources custom fields start without an automatically created Articles block.

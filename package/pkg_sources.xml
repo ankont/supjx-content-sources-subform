@@ -2,13 +2,13 @@
 <extension type="package" version="4.0" method="upgrade">
     <name>SuperSoftJx - Sources</name>
     <packagename>sources</packagename>
-    <creationDate>2026-11-17</creationDate>
+    <creationDate>2026-11-24</creationDate>
     <author>SuperSoft — Kontarinis Andreas</author>
     <authorEmail></authorEmail>
     <authorUrl></authorUrl>
     <copyright>© 2026 SuperSoft — Kontarinis Andreas</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
-    <version>5.0.2</version>
+    <version>5.1.1</version>
     <description>PKG_SOURCES_XML_DESCRIPTION</description>
 
     <languages folder="language">

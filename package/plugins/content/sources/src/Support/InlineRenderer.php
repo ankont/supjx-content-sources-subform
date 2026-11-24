@@ -331,10 +331,12 @@ final class InlineRenderer
         if ($includeAuto && $enabled) {
             $query = $this->baseQuery();
             // AND semantics without GROUP BY on full article rows (portable with ONLY_FULL_GROUP_BY).
-            $tagLanguage = $this->publicOnly && method_exists($this->app, 'getLanguageFilter') && $this->app->getLanguageFilter()
+            $strictTags = $this->publicOnly || $this->params->get('strict_taxonomy_access', false);
+            $tagReader = $this->publicOnly ? new User(0) : $this->app->getIdentity();
+            $tagLanguage = $strictTags && method_exists($this->app, 'getLanguageFilter') && $this->app->getLanguageFilter()
                 ? ' AND t.language IN (' . $this->db->quote('*') . ',' . $this->db->quote($this->app->getLanguage()->getTag()) . ')' : '';
             if ($tags) { $query->where('a.id IN (SELECT m.content_item_id FROM ' . $this->db->quoteName('#__contentitem_tag_map')
-                . ' AS m ' . ($this->publicOnly ? ' INNER JOIN ' . $this->db->quoteName('#__tags') . ' AS t ON t.id = m.tag_id AND t.published = 1 AND t.access IN (' . implode(',', array_map('intval', (new User(0))->getAuthorisedViewLevels()) ?: [0]) . ')' . $tagLanguage . ' ' : '')
+                . ' AS m ' . ($strictTags ? ' INNER JOIN ' . $this->db->quoteName('#__tags') . ' AS t ON t.id = m.tag_id AND t.published = 1 AND t.access IN (' . implode(',', array_map('intval', $tagReader->getAuthorisedViewLevels()) ?: [0]) . ')' . $tagLanguage . ' ' : '')
                 . ' WHERE m.type_alias = ' . $this->db->quote('com_content.article') . ' AND m.tag_id IN (' . implode(',', $tags)
                 . ') GROUP BY m.content_item_id HAVING COUNT(DISTINCT m.tag_id) = ' . count($tags) . ')'); }
             if ($block['filters']['categories']) {

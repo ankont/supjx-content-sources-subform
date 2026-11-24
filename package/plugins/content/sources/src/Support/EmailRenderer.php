@@ -22,10 +22,22 @@ final class EmailRenderer
     private array $limits;
     private string $root;
     private ?array $layoutPaths = null;
+    private bool $publicOnly;
+    private int $readerId;
+    private array $readerLevels;
 
     public function __construct(private Registry $document, private string $layoutPath, private ?array $overridePaths = null)
     {
-        if ($document->get('version') !== 1 || $document->get('publicOnly') !== true || (int) Factory::getApplication()->getIdentity()->id !== 0) { throw new \RuntimeException('sources.email.public_identity'); }
+        $params = new Registry(PluginHelper::getPlugin('content', 'sources')->params ?? '');
+        $identity = Factory::getApplication()->getIdentity();
+        if (!in_array($document->get('version'), [1,2], true) || !is_bool($document->get('publicOnly'))) { throw new \RuntimeException('sources.email.policy'); }
+        $this->publicOnly = $document->get('publicOnly');
+        $this->readerId = (int) $identity->id;
+        $this->readerLevels = $identity->getAuthorisedViewLevels();
+        if ($this->publicOnly ? $this->readerId !== 0 : ($document->get('version') !== 2
+            || !in_array((new Registry(PluginHelper::getPlugin('newsletter', 'sourcesemail')->params ?? ''))->get('email_private_enabled', 0), [true,1,'1'], true)
+            || !is_int($document->get('userId')) || $document->get('userId') < 1 || $this->readerId !== $document->get('userId')
+            || !empty($identity->guest) || !empty($identity->block) || (string) ($identity->activation ?? '') !== '')) { throw new \RuntimeException('sources.email.policy'); }
         $this->root = (string) $document->get('rootUrl', '');
         if (!preg_match('~^https?://[^/]+/~i', $this->root) || EmailHtml::url($this->root, $this->root) === '') { throw new \RuntimeException('sources.email.root'); }
         $this->limits = [];
@@ -38,15 +50,15 @@ final class EmailRenderer
             $value = $document->get('usage.' . $key);
             if (!is_int($value) || $value < 0) { throw new \RuntimeException('sources.email.usage'); }
         }
-        $params = new Registry(PluginHelper::getPlugin('content', 'sources')->params ?? '');
         $this->contentsLevels = max(1, (int) $params->get('contents_levels', 3));
         $this->showUnavailable = $params->get('show_unavailable', '');
         Factory::getApplication()->getLanguage()->load('plg_content_sources', JPATH_ADMINISTRATOR);
-        $this->resolver = new InlineRenderer(new Registry(), true);
+        $this->resolver = new InlineRenderer(new Registry(['strict_taxonomy_access'=>true]), $this->publicOnly);
     }
 
     public function prepare(string $html, int $depth = 1): string
     {
+        $this->assertReader();
         $this->bytes($html);
         $tokens = InlineTokens::scan($html);
         $remaining = $html;
@@ -63,7 +75,15 @@ final class EmailRenderer
             $this->bytes($result); $offset = $token['end'];
         }
         $result .= substr($html, $offset); $this->bytes($result);
+        $this->assertReader();
         return $result;
+    }
+    private function assertReader(): void
+    {
+        $identity = Factory::getApplication()->getIdentity();
+        if ((int) $identity->id !== $this->readerId || $identity->getAuthorisedViewLevels() !== $this->readerLevels) {
+            throw new \RuntimeException('sources.email.identity_changed');
+        }
     }
 
     private function container(array $config, int $depth): string
@@ -127,7 +147,7 @@ final class EmailRenderer
                     $introHtml .= $this->layout('sources.email.' . ($intro['type'] === 'tags' ? 'tag' : 'category') . '-intro', [
                         'entity' => $model, 'type' => $intro['type'], 'purpose' => $this->document->get('purpose') === 'preview' ? 'preview' : 'output',
                         'layout' => $block['layout'], 'display' => $config['display'], 'criteria' => $intro['criteria'],
-                        'public_only' => true, 'depth' => $depth, 'parent_article_id' => 0,
+                        'public_only' => $this->publicOnly, 'depth' => $depth, 'parent_article_id' => 0,
                         'presentation'=>$presentation, 'selected'=>$selected,
                     ]);
                 } finally { $this->introductionDepth--; }
@@ -136,7 +156,7 @@ final class EmailRenderer
             $html .= $introHtml !== '' || isset($block['group']) ? $this->layout('sources.email.group', [
                 'introductions_html'=>$introHtml, 'results_html'=>$results, 'introductions'=>$emailIntroductions,
                 'group'=>$block['group'] ?? null, 'layout'=>$block['layout'], 'display'=>$config['display'],
-                'purpose'=>$this->document->get('purpose') === 'preview' ? 'preview' : 'output', 'public_only'=>true,
+                'purpose'=>$this->document->get('purpose') === 'preview' ? 'preview' : 'output', 'public_only'=>$this->publicOnly,
                 'collapsible'=>(bool) array_filter($emailIntroductions, static fn($intro)=>$intro['presentation']['layout'] === 'collapsible'),
             ]) : $results;
             $this->bytes($html);
@@ -169,7 +189,7 @@ final class EmailRenderer
                 foreach ($fields as $field) {
                     if (($field->type ?? '') !== 'sources') { continue; }
                     // FieldsHelper models may have been booted under another identity earlier in the request.
-                    $levels = (new \Joomla\CMS\User\User(0))->getAuthorisedViewLevels();
+                    $levels = Factory::getApplication()->getIdentity()->getAuthorisedViewLevels();
                     if (!in_array((int) ($field->access ?? 1), $levels, true) || (int) ($field->state ?? 1) !== 1
                         || (!empty($field->group_id) && ((int) ($field->group_state ?? 0) !== 1 || !in_array((int) ($field->group_access ?? 0), $levels, true)))) { continue; }
                     $app = Factory::getApplication();

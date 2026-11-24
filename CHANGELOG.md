@@ -1,5 +1,23 @@
 # Changelog
 
+## 5.1.1 - 2026-11-24
+
+- Move the default-off private email setting to Sources Email 1.4.1. Ignore the
+  former Content setting and retain the existing host contract.
+
+## 5.1.0 - 2026-11-23
+
+- Accept compatible email preparation from any host; retain the exact public v1
+  Bridge response shape and require only maxBytes from host limits.
+- Sources Email 1.4.0 adds v2 capability discovery and explicit recipient userId
+  rendering behind the default-off central private-email switch.
+- Validate active Joomla accounts, scope article/category/ancestor/tag/field ACL
+  to the recipient, restore operator identity in finally and isolate reader caches.
+- Fall back atomically to public output with diagnostic warnings when private
+  rendering cannot safely proceed; never send mail or manage recipient snapshots.
+- Verify fixture regressions and 60 isolated real Joomla/Bridge assertions with
+  two recipient access levels and three memory-only messages.
+
 ## 5.0.2 - 2026-11-17
 
 - Give each Sources-specific SmartBrowser Usage field a meaningful native icon

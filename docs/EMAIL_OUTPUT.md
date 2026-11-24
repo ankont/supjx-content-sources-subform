@@ -1,35 +1,41 @@
-# Sources Email Output (Package 4.1.0 / Provider 1.0.0)
+# Sources Email Output (Package 5.1.1 / Provider 1.4.1)
 
 ## Installation and Contract
 
 Install the Sources package, then enable **Newsletter - SuperSoftJx - Sources
 Email** with **Public** access. This optional newsletter/sourcesemail plugin
-subscribes only to onNewsletterPrepareEmail, exact context
-com_newsletterbridge.newsletter, mutable Joomla Registry document version 1.
+subscribes only to `onNewsletterPrepareEmail`, with a mutable Joomla Registry
+document, version 1 or 2. Any host context is accepted (including
+`com_newsletterbridge.newsletter` and `com_smartnewsletter.dispatch`); context is
+diagnostic information, not an authorization mechanism.
 It has no dependency on Newsletter Bridge PHP classes and does nothing without
 the event. Native article output does not need SmartBrowser or SmartCrop.
 No-token content does not boot the Sources plugin, run queries or load assets.
-Existing Sources plugins share package version 4.1.0; this new provider has its
-own version, initially 1.0.0.
+Content/Button/Fields share package version 5.1.1; the newsletter provider has
+its independent version 1.4.1 (introduced at 1.0.0).
 
-The host owns author/job ACL, the anonymous dispatch identity, placeholders, URL
-normalisation, snapshots and sending. The provider verifies publicOnly=true and
-the anonymous identity, uses a public article/category/ancestor policy, and never
-loads subscriber data, redispatches the event or invokes a mail transport. Only
-html, usage.items, usage.tokens and appended errors change in the document.
-Failures keep the original document HTML and append sources.email.failed without
-private exception details. No public article matches intentionally produces empty
+The host owns author/job ACL, recipient identification, email addresses,
+personalization, files, URL normalization, queueing, snapshots/history and sending.
+Sources owns parsing, resolution and rendering of Sources tokens. It scopes and
+restores the Joomla identity itself; operator privileges never determine output.
+It never loads subscriber data, redispatches the event or invokes mail transport.
+Successful v1 changes only html and usage counters, preserving the Bridge's exact
+response whitelist. Failures keep original HTML/counters and append error codes.
+V2 additionally reports capabilities/effective policy; warnings report a private
+request downgraded to public. No accessible article matches intentionally produces empty
 Sources output. Malformed, encoded, misplaced, legacy and future syntax fails
 closed rather than leaking raw tokens into email.
 
 ## Shared Data, Different Presentation
 
 InlineRenderer::resolveBlocks is the same data-only selection/merge/order path
-used by site output. Email uses its explicit public-only constructor policy,
-bounded query sizes and a separate per-document item/token/depth budget. There
+used by site output. Email uses an explicit reader policy, bounded query sizes,
+the shared Contents depth policy and a per-document byte budget. There
 is no second parser, schema or article selector. Native article filters include
 state, article/category/ancestor access, publication windows and site language
-policy. Public Sources fields additionally check field/group access and state.
+policy. Sources fields additionally check field/group access and state for the
+effective reader, including private readers. Dynamic tags also check publication,
+language and reader access.
 Request snapshots are keyed by identity/policy, query and query limit; the email
 renderer never invokes SmartBrowser prepareOutput or site sources.item layouts.
 
@@ -75,7 +81,151 @@ summary, content and its already rendered html. item receives item and layout;
 the item model at that point has no html property. Values remain unescaped data
 except content, which is sanitised/safely rendered HTML. Escape title/summary/URLs
 with EmailHtml::escape. Overrides are trusted installed PHP; keep their HTML
-email-safe. They control presentation, not public resolution, budgets or sending.
+email-safe. They control presentation, not resolution, budgets or sending.
+Introduction/group overrides receive `public_only` for the effective policy.
+The existing item/block, header-only, unavailable and introduction contracts are
+unchanged; see [introductions](INTRODUCTIONS.md),
+[unavailable presentation](UNAVAILABLE_PRESENTATION.md) and
+[Contents headers](CONTENTS_HEADERS.md).
+
+## Host-Neutral Request Contract
+
+Required Registry fields (strict types):
+
+| Field | Value |
+| --- | --- |
+| version | integer 1 (public compatibility) or 2 (capabilities/private) |
+| purpose | string preview, test or send |
+| publicOnly | boolean; true always scopes rendering to guest id 0 |
+| html | string containing the email HTML/tokens |
+| rootUrl | absolute http(s) site root with trailing slash |
+| limits.maxBytes | positive integer; Sources caps it at 2,000,000 |
+
+Optional: `usage.items`/`usage.tokens` nonnegative integers (default 0),
+`errors`/`warnings` arrays of string codes (default empty).
+`unresolved` and other host-owned values are untouched.
+`maxItems`, `maxTokens` and `maxDepth` are neither required nor used; Sources
+retains its own schema/query bounds, configured limits, `contents_levels`, cycle
+guards and header-only behavior. No storage/schema migration is required.
+Unknown versions or a non-Registry document are ignored, not silently interpreted.
+Malformed supported documents append `sources.email.invalid_document`.
+
+### Public v1 (Existing Bridge)
+
+```php
+use Joomla\Registry\Registry;
+use Joomla\Event\Event;
+
+$document = new Registry([
+    'version' => 1, 'purpose' => 'preview', 'publicOnly' => true,
+    'rootUrl' => 'https://example.org/', 'html' => $html,
+    'limits' => ['maxBytes' => 2000000],
+    'usage' => ['items' => 0, 'tokens' => 0], 'errors' => [],
+]);
+$dispatcher->dispatch('onNewsletterPrepareEmail', new Event(
+    'onNewsletterPrepareEmail', [
+        'context' => 'com_newsletterbridge.newsletter', 'document' => $document,
+    ]
+));
+// Do not send if errors is nonempty. Read prepared HTML from $document.
+```
+
+The same public document from any other context produces the same HTML. The host
+does not need to change its identity. V1 adds no capability metadata on success:
+the existing Bridge validates an exact top-level response whitelist.
+
+### Private v2 and Capability Discovery
+
+Enable **Allow private email rendering** in **Newsletter - SuperSoftJx - Sources Email**
+(`email_private_enabled`, default 0). The former Content plugin setting is ignored;
+explicitly enable the switch in Sources Email after upgrading if needed.
+A private request must use v2, boolean
+`publicOnly: false` and a positive integer `userId`. Sources loads that Joomla
+account through UserFactoryInterface and requires an existing, non-guest,
+unblocked, activated account with readable authorized view levels. Only `userId`
+is accepted as the reader identity: no caller-supplied groups, access levels or
+User object. Public requests ignore userId and always use guest permissions.
+
+```php
+$document = new Registry([
+    'version' => 2, 'purpose' => 'send', 'publicOnly' => false,
+    'userId' => $verifiedJoomlaRecipientId, // integer, verified by the trusted host
+    'rootUrl' => 'https://example.org/', 'html' => $html,
+    'limits' => ['maxBytes' => 2000000], 'errors' => [], 'warnings' => [],
+]);
+$dispatcher->dispatch('onNewsletterPrepareEmail', new Event(
+    'onNewsletterPrepareEmail', [
+        'context' => 'com_smartnewsletter.dispatch', 'document' => $document,
+    ]
+));
+$provider = $document->get('providers.sourcesemail');
+// Check errors and warnings before storing/sending the resulting html.
+```
+
+V2 returns `providers.sourcesemail`:
+
+```json
+{
+  "capabilities": {
+    "versions": [1, 2], "privateRendering": true,
+    "privateEnabled": true, "policyAvailable": true
+  },
+  "effectivePublicOnly": false,
+  "effectiveUserId": 123
+}
+```
+
+Probe with a valid **v2 public request and empty html** to discover capabilities
+without resolving Sources, loading content or booting the content plugin. Or call
+the newsletter plugin's public `getCapabilities()` method. Missing v2 capability
+metadata means no declared private support; do not assume plugin version alone
+authorizes private output. `privateRendering` declares support; `privateEnabled`
+declares the central opt-in; `policyAvailable` declares readable configuration.
+Effective fields are null on the no-token probe or failed preparation. After
+successful public fallback they are true/0; requested publicOnly/userId remain
+unchanged. The context and client input are never authorization credentials.
+
+### Warnings, Failure and Isolation
+
+Private failure appends one of these **warnings**, then retries the original
+HTML with guest permissions. It does not fail the document when fallback succeeds.
+
+| Warning code suffix (prefix sources.email.) | Cause |
+| --- | --- |
+| private_contract_required | Private requested with v1; use v2 |
+| private_disabled | Central private-email switch is off |
+| user_missing | No explicit userId |
+| user_invalid | Wrong type/nonpositive ID, missing account or guest |
+| user_blocked | Account is blocked |
+| user_inactive | Account has a pending activation value |
+| private_access_unavailable | Configuration, user factory or access cannot be verified |
+| private_render_failed | Private preparation failed; partial output discarded |
+
+If public preparation also fails, `errors` receives `sources.email.failed` and
+original HTML/counters remain intact. Exception details and private data are not
+returned. `invalid_document` is a structural error, not a downgrade. The host
+must decide whether a warning/public fallback is acceptable or to stop the job;
+it must never send unresolved original tokens after an error.
+
+Identity changes are scoped in try/finally, including layout exceptions. Each
+reader gets a new EmailRenderer; request snapshots include effective reader id,
+view levels/groups, policy and language, and return detached data, not shared
+mutable article objects or cached HTML. Joomla FieldsHelper caches are cleared
+at identity boundaries to prevent cross-reader field disclosure. There is no
+cross-job email cache. Installed PHP overrides remain trusted code and must not
+change identity or bypass the reader policy. Links grant no additional access:
+following private links still requires normal Joomla login. Hosts own recipient
+verification and the risks of forwarding a private email.
+
+### SmartNewsletter Caller Changes
+
+Keep `com_smartnewsletter.dispatch` and maxBytes-only limits. Public operation may
+continue with v1. For private output, discover v2/private support, require the
+enabled policy, send v2/false plus the verified integer Joomla recipient userId,
+then inspect warnings/errors and effective policy. Do not send recipient email,
+groups or a User object as the identity contract. No host identity switch is
+needed. Any future recipient snapshot/history cache must be partitioned by
+recipient/policy (and invalidated when appropriate); Sources does not own it.
 
 ## Limits and Tests
 
@@ -90,10 +240,13 @@ Byte validation also applies to generated layout HTML. No provider cache spans j
 See [Contents header contract](CONTENTS_HEADERS.md).
 
 - npm test: email fixtures plus existing Sources regressions.
+- tests/php-email-hosts.php: multiple contexts, maxBytes-only requests, two readers,
+  gate/account warnings, failure rollback, exact identity restoration and cache
+  isolation without resetting caches between readers.
 - tests/email-joomla.php: opt-in isolated local Joomla integration, used with a
   temporary candidate package under /tmp/sources-email-... in the authorised
-  catichisi-local-web-1 container. It refuses an existing provider registration,
-  installs it transiently through the real loader and cleans up in finally.
+  catichisi-local-web-1 container. It preserves an enabled existing registration,
+  or installs it transiently through the real loader and cleans up in finally.
 - It creates randomly prefixed empty tables, only synthetic articles/newsletters/
   subscribers, and a memory-only mailer. No existing content/subscriber is changed.
 - Real bridge preview/test/start/process/resume exercise the same output, author
@@ -107,3 +260,11 @@ The lifecycle test intercepted three messages in memory only and verified
 cleanup of its provider registration/files and every synthetic table.
 
 No commit, push or release is implied by building the installable ZIP.
+
+Verified on 2026-11-23 with the candidate loaded from /tmp (no installed plugin
+replacement): 60 real Joomla loader/event/ACL/Bridge assertions, including two
+active recipient accounts with different access, private field ACL, category and
+ancestor ACL, public v1 response compatibility, alternate context/maxBytes-only,
+blocked/missing user fallback and reader/public cache isolation. Three messages
+were intercepted in memory only; all synthetic tables were removed. These are
+integration checks, not frontend TTFB profiling or real email delivery tests.

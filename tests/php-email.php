@@ -7,7 +7,13 @@ namespace Joomla\Registry {
         public function toArray() { return $this->data; }
     }
 }
-namespace Joomla\CMS\User { class User { public $id = 0; public function __construct($id = 0) { $this->id = $id; } public function getAuthorisedViewLevels() { return [1]; } } }
+namespace Joomla\CMS\User {
+    interface UserFactoryInterface { public function loadUserById(int $id): User; }
+    class User { public $id = 0; public int $block=0; public string $activation=''; public bool $guest;
+        public function __construct($id = 0) { $this->id = $id; $this->guest=$id===0; }
+        public function getAuthorisedViewLevels() { return $this->id === 21 ? [1,2] : ($this->id === 22 ? [1,3] : ($this->id === 999 ? [1,2,3,9] : [1])); }
+    }
+}
 namespace Joomla\CMS\Component { class ComponentHelper {
     public static bool $smart = false;
     public static array $presentation = [];
@@ -27,7 +33,7 @@ namespace SuperSoft\Component\Smartbrowser\Administrator\Support {
 }
 namespace Joomla\CMS\Uri { class Uri { public static function root() { return 'https://example.test/site/'; } } }
 namespace Joomla\CMS\Plugin {
-    class PluginHelper { public static array $params = []; public static function getPlugin(...$args) { return (object) ['params' => self::$params]; } }
+    class PluginHelper { public static array $params = []; public static array $emailParams = []; public static function getPlugin($group, ...$args) { return (object) ['params' => $group === 'newsletter' ? self::$emailParams : self::$params]; } }
     class CMSPlugin { public function getApplication() { return \Joomla\CMS\Factory::getApplication(); } }
 }
 namespace Joomla\CMS\Language { class Text { public static function _($key) { return $key === 'PLG_CONTENT_SOURCES_EMAIL_READ_MORE' ? 'Read the full article by following its title.' : $key; } } }
@@ -40,7 +46,7 @@ namespace Joomla\Database { interface DatabaseInterface {} }
 namespace Joomla\String { class StringHelper { public static function strtolower($v) { return strtolower($v); } public static function substr($v, $a, $b) { return substr($v, $a, $b); } } }
 namespace Joomla\CMS {
     class Factory {
-        public static $db; public static $identity = null; public static int $boots = 0;
+        public static $db; public static $identity = null; public static int $boots = 0; public static array $users=[];
         public static function getApplication() { return new class {
             public function getIdentity() { return Factory::$identity ?? new \Joomla\CMS\User\User(); }
             public function loadIdentity($identity) { Factory::$identity = $identity; }
@@ -50,7 +56,12 @@ namespace Joomla\CMS {
             public function bootPlugin(...$args) { Factory::$boots++; }
             public function bootComponent(...$args) {}
         }; }
-        public static function getContainer() { return new class { public function get($v) { return Factory::$db; } }; }
+        public static function getContainer() { return new class { public function get($v) {
+            if ($v === \Joomla\CMS\User\UserFactoryInterface::class) return new class implements \Joomla\CMS\User\UserFactoryInterface {
+                public function loadUserById(int $id): \Joomla\CMS\User\User { return clone (Factory::$users[$id] ?? new \Joomla\CMS\User\User()); }
+            };
+            return Factory::$db;
+        } }; }
         public static function getDate() { return new class { public function toSql() { return '2026-10-26 12:00:00'; } }; }
     }
 }
@@ -105,10 +116,18 @@ namespace {
                 if (str_contains($this->sql, '#__categories AS t')) { check(str_contains($this->sql, 'ancestor.access NOT IN'), 'Category ancestry missing'); }
                 return array_intersect_key($this->entities, array_flip([8, 12]));
             }
-            foreach (['a.state = 1', 'c.published = 1', 'a.access IN (1)', 'c.access IN (1)', 'ancestor.access', 'publish_up', 'publish_down', 'a.language', 'c.language'] as $guard) check(str_contains($this->sql, $guard), 'Missing public SQL guard ' . $guard);
+            $access = implode(',', Factory::getApplication()->getIdentity()->getAuthorisedViewLevels());
+            foreach (['a.state = 1', 'c.published = 1', 'a.access IN (' . $access . ')', 'c.access IN (' . $access . ')', 'ancestor.access', 'publish_up', 'publish_down', 'a.language', 'c.language'] as $guard) check(str_contains($this->sql, $guard), 'Missing reader SQL guard ' . $guard);
             $rows = []; $ids = array_keys($this->articles);
             if (preg_match('/\ba\.id IN \(([0-9,]+)\)/', $this->sql, $m)) $ids = array_map('intval', explode(',', $m[1]));
-            foreach ($ids as $id) { if (isset($this->articles[$id])) { $row = clone $this->articles[$id]; if ($key) $rows[$id] = $row; else $rows[] = $row; } }
+            $levels=Factory::getApplication()->getIdentity()->getAuthorisedViewLevels();
+            foreach ($ids as $id) { if (isset($this->articles[$id])) {
+                $row = clone $this->articles[$id];
+                if (!in_array($row->access ?? 1,$levels,true) || !in_array($row->category_access ?? 1,$levels,true)
+                    || !in_array($row->ancestor_access ?? 1,$levels,true) || ($row->state ?? 1) !== 1 || ($row->category_state ?? 1) !== 1
+                    || ($row->language ?? 'en-GB') !== 'en-GB') continue;
+                if ($key) $rows[$id] = $row; else $rows[] = $row;
+            } }
             return $rows;
         }
     };
@@ -118,9 +137,9 @@ namespace {
     $config = InlineConfig::decode('{"version":2,"display":"separate","blocks":[{"type":"articles","articles":[1]}]}');
     $token = static fn($c) => '{sources:' . json_encode($c) . '}';
     $provider = new SourcesEmail();
-    $dispatch = static function ($html, $changes = []) use ($base, $provider) {
+    $dispatch = static function ($html, $changes = [], $context = 'com_newsletterbridge.newsletter') use ($base, $provider) {
         RequestCache::reset(); $doc = new Registry(array_replace_recursive($base, $changes, ['html' => $html]));
-        $provider->prepareEmail(new \Joomla\Event\Event(['context' => 'com_newsletterbridge.newsletter', 'document' => $doc])); return $doc;
+        $provider->prepareEmail(new \Joomla\Event\Event(['context' => $context, 'document' => $doc])); return $doc;
     };
     $before = Factory::$db->queries; $doc = $dispatch('<p>Hello {name}</p>');
     check(Factory::$db->queries === $before && Factory::$boots === 0 && $doc->get('html') === '<p>Hello {name}</p>', 'No-token path must be zero-work');
@@ -140,7 +159,7 @@ namespace {
     foreach (['{sources:{bad}}', '{sources:{"version":99}}', '<a title="' . htmlspecialchars($token($config), ENT_QUOTES) . '">bad</a>', '&#123;sources:bad&#125;'] as $bad) {
         $doc = $dispatch($bad); check(count($doc->get('errors')) === 2 && $doc->get('html') === $bad, 'Malformed/misplaced input must fail atomically');
     }
-    $doc = $dispatch($token($config), ['version' => 2]); check($doc->get('usage.tokens') === 0, 'Future host protocol must be ignored');
+    $doc = $dispatch($token($config), ['version' => 999]); check($doc->get('usage.tokens') === 0, 'Future host protocol must be ignored');
     $doc = $dispatch($token($config), ['usage' => ['items' => 60, 'tokens' => 1]]); check(count($doc->get('errors')) === 1 && $doc->get('usage.items') === 61, 'No cumulative item cap');
     $doc = $dispatch(str_repeat($token($config), 10)); check(count($doc->get('errors')) === 1 && $doc->get('usage.tokens') === 10, 'No cumulative token cap');
     $originalArticles = Factory::$db->articles;

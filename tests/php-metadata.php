@@ -26,7 +26,7 @@ $extensions = [
 ];
 $manifests = [$package];
 $email = manifest($root . '/plugins/newsletter/sourcesemail/sourcesemail.xml');
-check(value($email, '/extension/version') === '1.3.0', 'Newsletter provider has independent version');
+check(value($email, '/extension/version') === '1.4.1', 'Newsletter provider has independent version');
 check(value($email, '/extension/@group') === 'newsletter' && value($email, '/extension/namespace') === 'SuperSoft\\Plugin\\Newsletter\\SourcesEmail', 'Newsletter provider identity');
 $emailDate = value($email, '/extension/creationDate');
 check((bool) preg_match('/^\d{4}-\d{2}-\d{2}$/D', $emailDate) && $emailDate <= $date, 'Independent newsletter provider release date');

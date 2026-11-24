@@ -2,10 +2,10 @@
 <extension type="plugin" group="content" method="upgrade">
     <name>PLG_CONTENT_SOURCES</name>
     <author>SuperSoft — Kontarinis Andreas</author>
-    <creationDate>2026-11-17</creationDate>
+    <creationDate>2026-11-24</creationDate>
     <copyright>Copyright 2026 SuperSoft - Kontarinis Andreas</copyright>
     <license>GNU General Public License version 2 or later; see LICENSE.txt</license>
-    <version>5.0.2</version>
+    <version>5.1.1</version>
     <description>PLG_CONTENT_SOURCES_XML_DESCRIPTION</description>
     <namespace path="src">SuperSoft\Plugin\Content\Sources</namespace>
     <files>
